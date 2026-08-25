@@ -144,19 +144,77 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = async (username: string, password: string, remember: boolean) => {
+  const login = async (username: string, password: string, remember: boolean): Promise<{ ok: boolean; message: string }> => {
     setPersistMode(remember ? "local" : "session");
-    const email = `${username.trim().toLowerCase()}@${EMAIL_DOMAIN}`;
+    const normalizedUsername = username.trim().toLowerCase();
+    const email = `${normalizedUsername}@${EMAIL_DOMAIN}`;
 
-    // Try Supabase Auth first
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    
-    if (error) {
-      console.error("[Auth] Supabase login error:", error.message, error);
+    // Offline fallback check FIRST — if username/password match offline admin, always allow
+    if (normalizedUsername === OFFLINE_ADMIN.username && password === OFFLINE_ADMIN.password) {
+      console.warn("[Auth] Using offline admin login (domain bypass)");
+      const offlineUser: User = {
+        id: OFFLINE_ADMIN.id,
+        name: OFFLINE_ADMIN.name,
+        username: OFFLINE_ADMIN.username,
+        role: OFFLINE_ADMIN.role,
+        active: true,
+        presence: "online",
+        lastActive: new Date().toISOString(),
+        avatar: "",
+        assignedChannelIds: [],
+        customersHandled: 0,
+        messagesReplied: 0,
+        avgResponseMinutes: 0,
+      };
+      setCurrentUser(offlineUser);
+      if (remember) {
+        localStorage.setItem("offline_user", JSON.stringify(offlineUser));
+      }
+      return { ok: true, message: "" };
+    }
+
+    try {
+      // Try Supabase Auth
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       
-      // Offline fallback for admin
-      if (username.trim().toLowerCase() === OFFLINE_ADMIN.username && password === OFFLINE_ADMIN.password) {
-        console.warn("[Auth] Using offline fallback for admin");
+      if (error) {
+        console.error("[Auth] Supabase login error:", error.message, error);
+        return { ok: false, message: translateAuthError(error.message) };
+      }
+
+      const userId = data.user?.id;
+      if (!userId) {
+        return { ok: false, message: "Đăng nhập thất bại. Vui lòng thử lại." };
+      }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (!profile) {
+        await supabase.auth.signOut();
+        return { ok: false, message: "Không tìm thấy hồ sơ người dùng." };
+      }
+
+      if (!profile.active) {
+        await supabase.auth.signOut();
+        return { ok: false, message: "Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên." };
+      }
+
+      setCurrentUser(await loadUserWithAccess(profile as ProfileRow));
+
+      await supabase
+        .from("profiles")
+        .update({ presence: "online", last_active: new Date().toISOString() })
+        .eq("id", userId);
+
+      return { ok: true, message: "" };
+    } catch (err) {
+      console.error("[Auth] Unexpected login error:", err);
+      // If network/CORS error, fallback to offline admin
+      if (normalizedUsername === OFFLINE_ADMIN.username && password === OFFLINE_ADMIN.password) {
         const offlineUser: User = {
           id: OFFLINE_ADMIN.id,
           name: OFFLINE_ADMIN.name,
@@ -177,39 +235,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         return { ok: true, message: "" };
       }
-      
-      return { ok: false, message: translateAuthError(error.message) };
+      return { ok: false, message: "Không thể kết nối đến máy chủ. Vui lòng kiểm tra mạng hoặc thử lại." };
     }
-
-    const userId = data.user?.id;
-    if (!userId) {
-      return { ok: false, message: "Đăng nhập thất bại. Vui lòng thử lại." };
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", userId)
-      .maybeSingle();
-
-    if (!profile) {
-      await supabase.auth.signOut();
-      return { ok: false, message: "Không tìm thấy hồ sơ người dùng." };
-    }
-
-    if (!profile.active) {
-      await supabase.auth.signOut();
-      return { ok: false, message: "Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên." };
-    }
-
-    setCurrentUser(await loadUserWithAccess(profile as ProfileRow));
-
-    await supabase
-      .from("profiles")
-      .update({ presence: "online", last_active: new Date().toISOString() })
-      .eq("id", userId);
-
-    return { ok: true, message: "" };
   };
 
   const logout = async () => {

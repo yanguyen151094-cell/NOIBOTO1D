@@ -172,6 +172,24 @@ export default function Login() {
               >
                 {submitting ? "Đang đăng nhập..." : "Đăng nhập"}
               </button>
+
+              {/* Offline admin bypass button */}
+              <button
+                type="button"
+                onClick={async () => {
+                  setError("");
+                  setSubmitting(true);
+                  const result = await login("admin", "admin123", true);
+                  setSubmitting(false);
+                  if (!result.ok) {
+                    setError(result.message);
+                  }
+                }}
+                className="w-full py-2 rounded-md border border-background-300 bg-background-50 text-foreground-600 text-xs hover:bg-background-100 transition-colors cursor-pointer whitespace-nowrap"
+              >
+                <i className="ri-wifi-off-line mr-1" />
+                Đăng nhập offline (không cần mạng)
+              </button>
             </form>
 
             <p className="mt-6 text-xs text-foreground-400 text-center">

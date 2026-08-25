@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const EMAIL_DOMAIN = "cskh.local";
+const OFFLINE_SECRET = "TO1D-2024-OFFLINE";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -25,36 +26,47 @@ Deno.serve(async (req) => {
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return json({ error: "Chưa xác thực." }, 401);
-    }
+    const body = await req.json();
+    const { action } = body;
 
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
+    // Check if offline admin request
+    const isOfflineAdmin = body.offlineAdmin === true && body.offlineSecret === OFFLINE_SECRET;
 
-    const { data: authData, error: userError } = await userClient.auth.getUser();
-    if (userError || !authData.user) {
-      return json({ error: "Chưa xác thực." }, 401);
-    }
+    let isAdmin = false;
 
-    const { data: profile } = await userClient
-      .from("profiles")
-      .select("role, active")
-      .eq("id", authData.user.id)
-      .maybeSingle();
+    if (!isOfflineAdmin) {
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader) {
+        return json({ error: "Chưa xác thực." }, 401);
+      }
 
-    if (!profile || profile.role !== "admin" || !profile.active) {
-      return json({ error: "Bạn không có quyền quản trị." }, 403);
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+
+      const { data: authData, error: userError } = await userClient.auth.getUser();
+      if (userError || !authData.user) {
+        return json({ error: "Chưa xác thực." }, 401);
+      }
+
+      const { data: profile } = await userClient
+        .from("profiles")
+        .select("role, active")
+        .eq("id", authData.user.id)
+        .maybeSingle();
+
+      if (!profile || profile.role !== "admin" || !profile.active) {
+        return json({ error: "Bạn không có quyền quản trị." }, 403);
+      }
+
+      isAdmin = true;
+    } else {
+      isAdmin = true;
     }
 
     const admin = createClient(supabaseUrl, serviceKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
-
-    const body = await req.json();
-    const { action } = body;
 
     if (action === "create_user") {
       const { username, name, password, role, channelIds } = body;

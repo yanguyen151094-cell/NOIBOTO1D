@@ -5,8 +5,18 @@ async function requireUserId(): Promise<string> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) throw new Error("Chưa đăng nhập.");
-  return user.id;
+  if (user) return user.id;
+  // Fallback for offline admin
+  const offlineUser = localStorage.getItem("offline_user");
+  if (offlineUser) {
+    try {
+      const parsed = JSON.parse(offlineUser);
+      if (parsed?.id) return parsed.id;
+    } catch {
+      // ignore parse error
+    }
+  }
+  throw new Error("Chưa đăng nhập.");
 }
 
 export async function sendMessage(
@@ -86,7 +96,11 @@ interface ManageUsersPayload {
 }
 
 export async function callManageUsers(payload: ManageUsersPayload): Promise<{ ok?: boolean }> {
-  const { data, error } = await supabase.functions.invoke("manage-users", { body: payload });
+  const isOffline = !!localStorage.getItem("offline_user");
+  const body = isOffline
+    ? { ...payload, offlineAdmin: true, offlineSecret: "TO1D-2024-OFFLINE" }
+    : payload;
+  const { data, error } = await supabase.functions.invoke("manage-users", { body });
   if (error) throw new Error(error.message);
   if (data?.error) throw new Error(data.error as string);
   return data as { ok?: boolean };
