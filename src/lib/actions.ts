@@ -102,7 +102,10 @@ export async function callManageUsers(payload: ManageUsersPayload): Promise<{ ok
     : payload;
   const { data, error } = await supabase.functions.invoke("manage-users", { body });
   if (error) throw new Error(error.message);
-  if (data?.error) throw new Error(data.error as string);
+  // Now Edge Function always returns 200; check ok flag in body
+  if (data?.ok === false || data?.error) {
+    throw new Error(data.error as string || "Lỗi từ máy chủ.");
+  }
   return data as { ok?: boolean };
 }
 

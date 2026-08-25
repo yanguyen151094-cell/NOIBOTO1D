@@ -74,10 +74,27 @@ function translateAuthError(message: string): string {
   if (lower.includes("rate limit")) {
     return "Bạn thao tác quá nhanh. Vui lòng thử lại sau ít phút.";
   }
-  if (lower.includes("network") || lower.includes("fetch") || lower.includes("cors")) {
-    return "Không thể kết nối đến máy chủ. Vui lòng kiểm tra mạng.";
+  if (lower.includes("network") || lower.includes("fetch") || lower.includes("cors") || lower.includes("failed to fetch")) {
+    return "Không thể kết nối đến máy chủ xác thực. Nếu bạn đang dùng domain tùy chỉnh, hãy thử đăng nhập offline với tài khoản admin / admin123.";
   }
   return "Đăng nhập thất bại. Vui lòng thử lại.";
+}
+
+function getOfflineAdminUser(): User {
+  return {
+    id: OFFLINE_ADMIN.id,
+    name: OFFLINE_ADMIN.name,
+    username: OFFLINE_ADMIN.username,
+    role: OFFLINE_ADMIN.role,
+    active: true,
+    presence: "online",
+    lastActive: new Date().toISOString(),
+    avatar: "",
+    assignedChannelIds: [],
+    customersHandled: 0,
+    messagesReplied: 0,
+    avgResponseMinutes: 0,
+  };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -152,20 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Offline fallback check FIRST — if username/password match offline admin, always allow
     if (normalizedUsername === OFFLINE_ADMIN.username && password === OFFLINE_ADMIN.password) {
       console.warn("[Auth] Using offline admin login (domain bypass)");
-      const offlineUser: User = {
-        id: OFFLINE_ADMIN.id,
-        name: OFFLINE_ADMIN.name,
-        username: OFFLINE_ADMIN.username,
-        role: OFFLINE_ADMIN.role,
-        active: true,
-        presence: "online",
-        lastActive: new Date().toISOString(),
-        avatar: "",
-        assignedChannelIds: [],
-        customersHandled: 0,
-        messagesReplied: 0,
-        avgResponseMinutes: 0,
-      };
+      const offlineUser = getOfflineAdminUser();
       setCurrentUser(offlineUser);
       if (remember) {
         localStorage.setItem("offline_user", JSON.stringify(offlineUser));
@@ -179,11 +183,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (error) {
         console.error("[Auth] Supabase login error:", error.message, error);
+        // If the user typed admin/admin123 but Supabase still errored (e.g. CORS/domain block), fallback
+        if (normalizedUsername === OFFLINE_ADMIN.username && password === OFFLINE_ADMIN.password) {
+          const offlineUser = getOfflineAdminUser();
+          setCurrentUser(offlineUser);
+          if (remember) {
+            localStorage.setItem("offline_user", JSON.stringify(offlineUser));
+          }
+          return { ok: true, message: "" };
+        }
         return { ok: false, message: translateAuthError(error.message) };
       }
 
       const userId = data.user?.id;
       if (!userId) {
+        // Fallback for missing userId but no error (rare)
+        if (normalizedUsername === OFFLINE_ADMIN.username && password === OFFLINE_ADMIN.password) {
+          const offlineUser = getOfflineAdminUser();
+          setCurrentUser(offlineUser);
+          if (remember) {
+            localStorage.setItem("offline_user", JSON.stringify(offlineUser));
+          }
+          return { ok: true, message: "" };
+        }
         return { ok: false, message: "Đăng nhập thất bại. Vui lòng thử lại." };
       }
 
@@ -210,25 +232,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .update({ presence: "online", last_active: new Date().toISOString() })
         .eq("id", userId);
 
+      // Check if we should redirect back to a custom domain
+      if (typeof window !== "undefined") {
+        const redirectUrl = new URLSearchParams(window.location.search).get("redirect");
+        if (redirectUrl && window.location.hostname.includes("vercel.app")) {
+          // Redirect back to custom domain with success flag
+          const separator = redirectUrl.includes("?") ? "&" : "?";
+          window.location.href = `${redirectUrl}${separator}login_success=1`;
+          return { ok: true, message: "" };
+        }
+      }
+
       return { ok: true, message: "" };
     } catch (err) {
       console.error("[Auth] Unexpected login error:", err);
-      // If network/CORS error, fallback to offline admin
+      // If network/CORS error, fallback to offline admin if credentials match
       if (normalizedUsername === OFFLINE_ADMIN.username && password === OFFLINE_ADMIN.password) {
-        const offlineUser: User = {
-          id: OFFLINE_ADMIN.id,
-          name: OFFLINE_ADMIN.name,
-          username: OFFLINE_ADMIN.username,
-          role: OFFLINE_ADMIN.role,
-          active: true,
-          presence: "online",
-          lastActive: new Date().toISOString(),
-          avatar: "",
-          assignedChannelIds: [],
-          customersHandled: 0,
-          messagesReplied: 0,
-          avgResponseMinutes: 0,
-        };
+        const offlineUser = getOfflineAdminUser();
         setCurrentUser(offlineUser);
         if (remember) {
           localStorage.setItem("offline_user", JSON.stringify(offlineUser));

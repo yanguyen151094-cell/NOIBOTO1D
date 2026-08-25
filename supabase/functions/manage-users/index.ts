@@ -22,9 +22,16 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!supabaseUrl || !anonKey) {
+      return json({ ok: false, error: "Server configuration error: missing Supabase URL or anon key." }, 200);
+    }
+    if (!serviceKey) {
+      return json({ ok: false, error: "Server configuration error: missing SUPABASE_SERVICE_ROLE_KEY. Vui lòng thêm secret này trong Supabase Dashboard > Edge Functions > manage-users." }, 200);
+    }
 
     const body = await req.json();
     const { action } = body;
@@ -37,7 +44,7 @@ Deno.serve(async (req) => {
     if (!isOfflineAdmin) {
       const authHeader = req.headers.get("Authorization");
       if (!authHeader) {
-        return json({ error: "Chưa xác thực." }, 401);
+        return json({ ok: false, error: "Chưa xác thực." }, 200);
       }
 
       const userClient = createClient(supabaseUrl, anonKey, {
@@ -46,7 +53,7 @@ Deno.serve(async (req) => {
 
       const { data: authData, error: userError } = await userClient.auth.getUser();
       if (userError || !authData.user) {
-        return json({ error: "Chưa xác thực." }, 401);
+        return json({ ok: false, error: "Chưa xác thực." }, 200);
       }
 
       const { data: profile } = await userClient
@@ -56,7 +63,7 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (!profile || profile.role !== "admin" || !profile.active) {
-        return json({ error: "Bạn không có quyền quản trị." }, 403);
+        return json({ ok: false, error: "Bạn không có quyền quản trị." }, 200);
       }
 
       isAdmin = true;
@@ -71,14 +78,14 @@ Deno.serve(async (req) => {
     if (action === "create_user") {
       const { username, name, password, role, channelIds } = body;
       if (!username || !password) {
-        return json({ error: "Thiếu tên đăng nhập hoặc mật khẩu." }, 400);
+        return json({ ok: false, error: "Thiếu tên đăng nhập hoặc mật khẩu." }, 200);
       }
       const cleanUsername = String(username).trim().toLowerCase();
       if (!/^[a-z0-9._-]+$/.test(cleanUsername)) {
-        return json({ error: "Tên đăng nhập chỉ gồm chữ thường, số, dấu chấm, gạch ngang." }, 400);
+        return json({ ok: false, error: "Tên đăng nhập chỉ gồm chữ thường, số, dấu chấm, gạch ngang." }, 200);
       }
       if (String(password).length < 6) {
-        return json({ error: "Mật khẩu phải có ít nhất 6 ký tự." }, 400);
+        return json({ ok: false, error: "Mật khẩu phải có ít nhất 6 ký tự." }, 200);
       }
       const email = `${cleanUsername}@${EMAIL_DOMAIN}`;
       const { data: created, error: createError } = await admin.auth.admin.createUser({
@@ -92,7 +99,10 @@ Deno.serve(async (req) => {
         },
       });
       if (createError) {
-        return json({ error: createError.message }, 400);
+        return json({ ok: false, error: createError.message }, 200);
+      }
+      if (!created?.user?.id) {
+        return json({ ok: false, error: "Không thể tạo tài khoản — phản hồi từ máy chủ thiếu thông tin." }, 200);
       }
       if (Array.isArray(channelIds) && channelIds.length > 0) {
         const rows = channelIds.map((cid: string) => ({
@@ -107,13 +117,13 @@ Deno.serve(async (req) => {
     if (action === "reset_password") {
       const { userId, password } = body;
       if (!userId || !password) {
-        return json({ error: "Thiếu thông tin." }, 400);
+        return json({ ok: false, error: "Thiếu thông tin." }, 200);
       }
       const { error } = await admin.auth.admin.updateUserById(userId, {
         password: String(password),
       });
       if (error) {
-        return json({ error: error.message }, 400);
+        return json({ ok: false, error: error.message }, 200);
       }
       return json({ ok: true });
     }
@@ -121,7 +131,7 @@ Deno.serve(async (req) => {
     if (action === "set_active") {
       const { userId, active } = body;
       if (!userId) {
-        return json({ error: "Thiếu thông tin." }, 400);
+        return json({ ok: false, error: "Thiếu thông tin." }, 200);
       }
       await admin.from("profiles").update({ active: !!active }).eq("id", userId);
       if (active) {
@@ -135,7 +145,7 @@ Deno.serve(async (req) => {
     if (action === "revoke_sessions") {
       const { userId } = body;
       if (!userId) {
-        return json({ error: "Thiếu thông tin." }, 400);
+        return json({ ok: false, error: "Thiếu thông tin." }, 200);
       }
       await admin.rpc("revoke_user_sessions", { uid: userId });
       return json({ ok: true });
@@ -144,7 +154,7 @@ Deno.serve(async (req) => {
     if (action === "delete_user") {
       const { userId } = body;
       if (!userId) {
-        return json({ error: "Thiếu thông tin." }, 400);
+        return json({ ok: false, error: "Thiếu thông tin." }, 200);
       }
 
       const { data: assigned } = await admin
@@ -154,8 +164,8 @@ Deno.serve(async (req) => {
         .limit(1);
       if (assigned && assigned.length > 0) {
         return json(
-          { error: "Tài khoản này còn khách hàng đang phụ trách. Hãy chuyển dữ liệu cho người khác trước khi xóa." },
-          400
+          { ok: false, error: "Tài khoản này còn khách hàng đang phụ trách. Hãy chuyển dữ liệu cho người khác trước khi xóa." },
+          200
         );
       }
 
@@ -170,19 +180,20 @@ Deno.serve(async (req) => {
 
       const { error: profErr } = await admin.from("profiles").delete().eq("id", userId);
       if (profErr) {
-        return json({ error: profErr.message }, 400);
+        return json({ ok: false, error: profErr.message }, 200);
       }
 
       const { error: delErr } = await admin.auth.admin.deleteUser(userId);
       if (delErr) {
-        return json({ error: delErr.message }, 400);
+        return json({ ok: false, error: delErr.message }, 200);
       }
 
       return json({ ok: true });
     }
 
-    return json({ error: "Hành động không hợp lệ." }, 400);
+    return json({ ok: false, error: "Hành động không hợp lệ." }, 200);
   } catch (e) {
-    return json({ error: e instanceof Error ? e.message : "Lỗi máy chủ." }, 500);
+    console.error("Edge Function error:", e);
+    return json({ ok: false, error: e instanceof Error ? e.message : "Lỗi máy chủ." }, 200);
   }
 });

@@ -211,21 +211,45 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
             <i className="ri-arrow-down-s-line text-foreground-500 hidden sm:block" />
           </button>
           {menuOpen && (
-            <div className="absolute right-0 top-full mt-1 w-52 bg-background-50 rounded-lg border border-background-200 shadow-sm py-1 z-30 animate-fade-in">
-              <div className="px-4 py-2 border-b border-background-100 sm:hidden">
+            <div className="absolute right-0 top-full mt-1 w-56 bg-background-50 rounded-lg border border-background-200 shadow-sm py-1 z-30 animate-fade-in">
+              <div className="px-4 py-2.5 border-b border-background-100">
                 <p className="text-sm font-semibold text-foreground-900">{currentUser?.name}</p>
                 <p className="text-[11px] text-foreground-500">
                   {isAdmin ? "Ghe OBICARE" : "Nhân viên"}
                 </p>
+                {!!localStorage.getItem("offline_user") && (
+                  <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 mt-1">
+                    <i className="ri-wifi-off-line" />
+                    Offline mode
+                  </span>
+                )}
               </div>
               <button
                 type="button"
-                onClick={handleLogout}
-                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10 cursor-pointer"
+                onClick={() => { navigate("/settings"); setMenuOpen(false); }}
+                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-foreground-700 hover:bg-background-100 cursor-pointer"
               >
-                <i className="ri-logout-box-r-line" />
-                Đăng xuất
+                <i className="ri-settings-3-line" />
+                Cài đặt
               </button>
+              <button
+                type="button"
+                onClick={() => { navigate("/wall"); setMenuOpen(false); }}
+                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-foreground-700 hover:bg-background-100 cursor-pointer"
+              >
+                <i className="ri-user-line" />
+                Tường cá nhân
+              </button>
+              <div className="border-t border-background-100 mt-1 pt-1">
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-500 hover:bg-red-500/10 cursor-pointer"
+                >
+                  <i className="ri-logout-box-r-line" />
+                  Đăng xuất
+                </button>
+              </div>
             </div>
           )}
         </div>
