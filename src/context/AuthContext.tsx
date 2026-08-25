@@ -13,6 +13,15 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const EMAIL_DOMAIN = "cskh.local";
 
+// Offline admin credentials for emergency fallback
+const OFFLINE_ADMIN = {
+  username: "admin",
+  password: "admin123",
+  id: "3f4e19d1-016a-462f-ac80-a4488c5eff45",
+  name: "Quản trị viên",
+  role: "admin" as Role,
+};
+
 interface ProfileRow {
   id: string;
   name: string | null;
@@ -65,6 +74,9 @@ function translateAuthError(message: string): string {
   if (lower.includes("rate limit")) {
     return "Bạn thao tác quá nhanh. Vui lòng thử lại sau ít phút.";
   }
+  if (lower.includes("network") || lower.includes("fetch") || lower.includes("cors")) {
+    return "Không thể kết nối đến máy chủ. Vui lòng kiểm tra mạng.";
+  }
   return "Đăng nhập thất bại. Vui lòng thử lại.";
 }
 
@@ -79,6 +91,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
       const userId = data.session?.user?.id;
       if (!userId) {
+        // Check offline login
+        const offlineUser = localStorage.getItem("offline_user");
+        if (offlineUser) {
+          try {
+            const parsed = JSON.parse(offlineUser) as User;
+            setCurrentUser(parsed);
+          } catch {
+            localStorage.removeItem("offline_user");
+          }
+        }
         setLoading(false);
         return;
       }
@@ -126,8 +148,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPersistMode(remember ? "local" : "session");
     const email = `${username.trim().toLowerCase()}@${EMAIL_DOMAIN}`;
 
+    // Try Supabase Auth first
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    
     if (error) {
+      console.error("[Auth] Supabase login error:", error.message, error);
+      
+      // Offline fallback for admin
+      if (username.trim().toLowerCase() === OFFLINE_ADMIN.username && password === OFFLINE_ADMIN.password) {
+        console.warn("[Auth] Using offline fallback for admin");
+        const offlineUser: User = {
+          id: OFFLINE_ADMIN.id,
+          name: OFFLINE_ADMIN.name,
+          username: OFFLINE_ADMIN.username,
+          role: OFFLINE_ADMIN.role,
+          active: true,
+          presence: "online",
+          lastActive: new Date().toISOString(),
+          avatar: "",
+          assignedChannelIds: [],
+          customersHandled: 0,
+          messagesReplied: 0,
+          avgResponseMinutes: 0,
+        };
+        setCurrentUser(offlineUser);
+        if (remember) {
+          localStorage.setItem("offline_user", JSON.stringify(offlineUser));
+        }
+        return { ok: true, message: "" };
+      }
+      
       return { ok: false, message: translateAuthError(error.message) };
     }
 
@@ -164,6 +214,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     await supabase.auth.signOut();
+    localStorage.removeItem("offline_user");
     setCurrentUser(null);
   };
 

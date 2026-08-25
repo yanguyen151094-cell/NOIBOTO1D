@@ -1,11 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl =
-  import.meta.env.VITE_PUBLIC_SUPABASE_URL ||
-  "https://defffgyrdexrydrfnura.supabase.co";
-const supabaseAnonKey =
-  import.meta.env.VITE_PUBLIC_SUPABASE_ANON_KEY ||
-  "sb_publishable_UMuOwwpDwOZKrwWOSFJjvQ_tBoWq9eK";
+const supabaseUrl = "https://defffgyrdexrydrfnura.supabase.co";
+const supabaseAnonKey = "sb_publishable_UMuOwwpDwOZKrwWOSFJjvQ_tBoWq9eK";
 
 const REMEMBER_KEY = "cskh_remember";
 
