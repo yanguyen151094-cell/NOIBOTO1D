@@ -293,14 +293,34 @@ function WallFeed({
     e.target.value = "";
     setUploadingImg(true);
     try {
+      // Try to upload to Supabase Storage bucket 'public' first
+      const bucketName = "public";
       const ext = file.name.split(".").pop() || "jpg";
-      const path = `posts/${staff.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error: upErr } = await supabase.storage.from("staff-assets").upload(path, file);
-      if (upErr) throw upErr;
-      const { data } = supabase.storage.from("staff-assets").getPublicUrl(path);
+      const path = `staff-posts/${staff.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      
+      const { error: upErr } = await supabase.storage.from(bucketName).upload(path, file, {
+        upsert: true,
+      });
+      
+      if (upErr) {
+        console.error("[Upload] Supabase storage error:", upErr);
+        // Fallback: convert to base64 for immediate display
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        setPostImage(base64);
+        notify("Đã lưu ảnh tạm (base64). Lưu ý: ảnh sẽ không đồng bộ giữa các thiết bị.");
+        return;
+      }
+      
+      const { data } = supabase.storage.from(bucketName).getPublicUrl(path);
       setPostImage(data.publicUrl);
-    } catch {
-      notify("Upload ảnh thất bại.");
+    } catch (err) {
+      console.error("[Upload] Unexpected error:", err);
+      notify("Upload ảnh thất bại: " + (err instanceof Error ? err.message : "Lỗi không xác định"));
     } finally {
       setUploadingImg(false);
     }
@@ -416,16 +436,22 @@ function WallFeed({
                 e.target.value = "";
                 setUploadingImg(true);
                 try {
+                  const bucketName = "public";
                   const ext = file.name.split(".").pop() || "jpg";
                   const path = `avatars/${currentUser.id}/${Date.now()}.${ext}`;
-                  const { error: upErr } = await supabase.storage.from("staff-assets").upload(path, file);
-                  if (upErr) throw upErr;
-                  const { data } = supabase.storage.from("staff-assets").getPublicUrl(path);
+                  const { error: upErr } = await supabase.storage.from(bucketName).upload(path, file, { upsert: true });
+                  if (upErr) {
+                    console.error("[Avatar Upload] Error:", upErr);
+                    notify("Upload ảnh thất bại: " + upErr.message);
+                    return;
+                  }
+                  const { data } = supabase.storage.from(bucketName).getPublicUrl(path);
                   await updateProfileAvatar(data.publicUrl);
                   notify("Đã cập nhật ảnh đại diện!");
                   window.location.reload();
-                } catch {
-                  notify("Upload ảnh thất bại.");
+                } catch (err) {
+                  console.error("[Avatar Upload] Unexpected error:", err);
+                  notify("Upload ảnh thất bại: " + (err instanceof Error ? err.message : "Lỗi không xác định"));
                 } finally {
                   setUploadingImg(false);
                 }
