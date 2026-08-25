@@ -1,0 +1,184 @@
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-body: 'Be Vietnam Pro', system-ui, sans-serif;
+  --font-heading: 'Plus Jakarta Sans', 'Be Vietnam Pro', system-ui, sans-serif;
+  --font-label: 'Be Vietnam Pro', system-ui, sans-serif;
+
+  /* Background: xanh rất nhạt, gần trắng */
+  --background-50:  0.985 0.005 255;
+  --background-100: 0.965 0.008 255;
+  --background-200: 0.935 0.012 255;
+  --background-300: 0.885 0.016 255;
+  --background-400: 0.815 0.020 255;
+  --background-500: 0.725 0.022 255;
+  --background-600: 0.615 0.020 255;
+  --background-700: 0.500 0.018 255;
+  --background-800: 0.385 0.016 255;
+  --background-900: 0.275 0.014 255;
+  --background-950: 0.185 0.010 255;
+
+  /* Accent: cam/vàng năng động — màu chữ "1" và mũi tên trong logo */
+  --accent-50:  0.980 0.015 55;
+  --accent-100: 0.960 0.030 55;
+  --accent-200: 0.925 0.055 55;
+  --accent-300: 0.870 0.085 55;
+  --accent-400: 0.800 0.115 55;
+  --accent-500: 0.730 0.135 55;
+  --accent-600: 0.650 0.125 55;
+  --accent-700: 0.550 0.105 55;
+  --accent-800: 0.440 0.085 55;
+  --accent-900: 0.330 0.065 55;
+  --accent-950: 0.225 0.045 55;
+
+  /* Primary: xanh dương đậm — màu nền logo */
+  --primary-50:  0.975 0.010 255;
+  --primary-100: 0.940 0.025 255;
+  --primary-200: 0.870 0.050 255;
+  --primary-300: 0.780 0.080 255;
+  --primary-400: 0.670 0.115 255;
+  --primary-500: 0.550 0.135 255;
+  --primary-600: 0.460 0.125 255;
+  --primary-700: 0.380 0.105 255;
+  --primary-800: 0.300 0.085 255;
+  --primary-900: 0.230 0.065 255;
+  --primary-950: 0.160 0.045 255;
+
+  /* Secondary: xanh ngọc nhẹ — hỗ trợ */
+  --secondary-50:  0.980 0.010 200;
+  --secondary-100: 0.950 0.020 200;
+  --secondary-200: 0.900 0.040 200;
+  --secondary-300: 0.820 0.065 200;
+  --secondary-400: 0.720 0.085 200;
+  --secondary-500: 0.620 0.095 200;
+  --secondary-600: 0.530 0.085 200;
+  --secondary-700: 0.440 0.070 200;
+  --secondary-800: 0.350 0.055 200;
+  --secondary-900: 0.260 0.040 200;
+  --secondary-950: 0.175 0.025 200;
+
+  /* Foreground: xanh đậm/xám */
+  --foreground-50:  0.975 0.005 255;
+  --foreground-100: 0.940 0.008 255;
+  --foreground-200: 0.875 0.012 255;
+  --foreground-300: 0.790 0.016 255;
+  --foreground-400: 0.685 0.018 255;
+  --foreground-500: 0.570 0.018 255;
+  --foreground-600: 0.465 0.016 255;
+  --foreground-700: 0.370 0.014 255;
+  --foreground-800: 0.285 0.012 255;
+  --foreground-900: 0.210 0.010 255;
+  --foreground-950: 0.135 0.008 255;
+}
+
+.dark {
+  --background-50:  0.185 0.010 255;
+  --background-100: 0.220 0.012 255;
+  --background-200: 0.275 0.014 255;
+  --background-300: 0.335 0.016 255;
+  --background-400: 0.410 0.018 255;
+  --background-500: 0.500 0.020 255;
+  --background-600: 0.585 0.022 255;
+  --background-700: 0.670 0.024 255;
+  --background-800: 0.770 0.026 255;
+  --background-900: 0.875 0.022 255;
+  --background-950: 0.965 0.010 255;
+
+  --accent-50:  0.225 0.045 55;
+  --accent-100: 0.330 0.065 55;
+  --accent-200: 0.440 0.085 55;
+  --accent-300: 0.550 0.105 55;
+  --accent-400: 0.650 0.125 55;
+  --accent-500: 0.730 0.135 55;
+  --accent-600: 0.800 0.115 55;
+  --accent-700: 0.870 0.085 55;
+  --accent-800: 0.925 0.055 55;
+  --accent-900: 0.960 0.030 55;
+  --accent-950: 0.980 0.015 55;
+
+  --primary-50:  0.160 0.045 255;
+  --primary-100: 0.230 0.065 255;
+  --primary-200: 0.300 0.085 255;
+  --primary-300: 0.380 0.105 255;
+  --primary-400: 0.460 0.125 255;
+  --primary-500: 0.550 0.135 255;
+  --primary-600: 0.670 0.115 255;
+  --primary-700: 0.780 0.080 255;
+  --primary-800: 0.870 0.050 255;
+  --primary-900: 0.940 0.025 255;
+  --primary-950: 0.975 0.010 255;
+
+  --secondary-50:  0.175 0.025 200;
+  --secondary-100: 0.260 0.040 200;
+  --secondary-200: 0.350 0.055 200;
+  --secondary-300: 0.440 0.070 200;
+  --secondary-400: 0.530 0.085 200;
+  --secondary-500: 0.620 0.095 200;
+  --secondary-600: 0.720 0.085 200;
+  --secondary-700: 0.820 0.065 200;
+  --secondary-800: 0.900 0.040 200;
+  --secondary-900: 0.950 0.020 200;
+  --secondary-950: 0.980 0.010 200;
+
+  --foreground-50:  0.135 0.008 255;
+  --foreground-100: 0.210 0.010 255;
+  --foreground-200: 0.285 0.012 255;
+  --foreground-300: 0.370 0.014 255;
+  --foreground-400: 0.465 0.016 255;
+  --foreground-500: 0.570 0.018 255;
+  --foreground-600: 0.685 0.018 255;
+  --foreground-700: 0.790 0.016 255;
+  --foreground-800: 0.875 0.012 255;
+  --foreground-900: 0.940 0.008 255;
+  --foreground-950: 0.975 0.005 255;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+#root {
+  height: 100dvh;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  background-color: oklch(var(--background-50));
+  color: oklch(var(--foreground-900));
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-heading);
+}
+
+/* Anti-spam honeypot: hidden from real users, kept out of accessibility tree */
+.contact-field-captcha {
+  position: absolute !important;
+  left: -9999px !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+}
+
+/* Thin custom scrollbar for inbox lists */
+.cs-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.cs-scroll::-webkit-scrollbar-thumb {
+  background: oklch(var(--background-300));
+  border-radius: 9999px;
+}
+.cs-scroll::-webkit-scrollbar-thumb:hover {
+  background: oklch(var(--background-400));
+}
+.cs-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
