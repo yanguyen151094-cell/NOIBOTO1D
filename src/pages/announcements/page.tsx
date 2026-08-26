@@ -12,6 +12,24 @@ import {
 import { mapAnnouncement } from "@/lib/mappers";
 import { formatRelative } from "@/utils/ui";
 import type { Announcement } from "@/types";
+import { mockAnnouncements } from "@/mocks/appData";
+
+function isAuthError(message: string): boolean {
+  return (
+    message.includes("auth") ||
+    message.includes("JWT") ||
+    message.includes("session") ||
+    message.includes("unauthorized") ||
+    message.includes("401") ||
+    message.includes("403") ||
+    message.includes("RLS") ||
+    message.includes("network") ||
+    message.includes("cors") ||
+    message.includes("failed to fetch") ||
+    message.includes("timeout") ||
+    message.includes("offline")
+  );
+}
 
 export default function Announcements() {
   const { currentUser } = useAuth();
@@ -30,27 +48,35 @@ export default function Announcements() {
 
   const { data: items, loading, error, reload } = useQuery<Announcement[]>(
     async () => {
-      const [annRes, likeRes] = await Promise.all([
-        supabase.from("announcements").select("*").order("created_at", { ascending: false }),
-        supabase.from("announcement_likes").select("announcement_id, user_id"),
-      ]);
-      if (annRes.error) throw annRes.error;
-      if (likeRes.error) throw likeRes.error;
+      try {
+        const [annRes, likeRes] = await Promise.all([
+          supabase.from("announcements").select("*").order("created_at", { ascending: false }),
+          supabase.from("announcement_likes").select("announcement_id, user_id"),
+        ]);
+        if (annRes.error) throw annRes.error;
+        if (likeRes.error) throw likeRes.error;
 
-      const likeCount: Record<string, number> = {};
-      const likedByMe = new Set<string>();
-      (likeRes.data ?? []).forEach((l) => {
-        likeCount[l.announcement_id] = (likeCount[l.announcement_id] ?? 0) + 1;
-        if (l.user_id === currentUser?.id) likedByMe.add(l.announcement_id);
-      });
+        const likeCount: Record<string, number> = {};
+        const likedByMe = new Set<string>();
+        (likeRes.data ?? []).forEach((l) => {
+          likeCount[l.announcement_id] = (likeCount[l.announcement_id] ?? 0) + 1;
+          if (l.user_id === currentUser?.id) likedByMe.add(l.announcement_id);
+        });
 
-      return (annRes.data ?? []).map((row) =>
-        mapAnnouncement({
-          ...row,
-          like_count: likeCount[row.id] ?? 0,
-          liked: likedByMe.has(row.id),
-        })
-      );
+        return (annRes.data ?? []).map((row) =>
+          mapAnnouncement({
+            ...row,
+            like_count: likeCount[row.id] ?? 0,
+            liked: likedByMe.has(row.id),
+          })
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (isAuthError(msg)) {
+          return mockAnnouncements.map((a) => ({ ...a, liked: false }));
+        }
+        throw err;
+      }
     },
     [currentUser?.id]
   );

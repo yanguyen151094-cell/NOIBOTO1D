@@ -42,7 +42,8 @@ interface UnifiedRow {
 }
 
 export default function CustomerNotes() {
-  const { user } = useAuth();
+  const { currentUser } = useAuth();
+  const user = currentUser;
   const isAdmin = user?.role === "admin";
   const [search, setSearch] = useState("");
   const [onlyRegistered, setOnlyRegistered] = useState(false);

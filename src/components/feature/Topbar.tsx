@@ -217,12 +217,6 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
                 <p className="text-[11px] text-foreground-500">
                   {isAdmin ? "Ghe OBICARE" : "Nhân viên"}
                 </p>
-                {!!localStorage.getItem("offline_user") && (
-                  <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 mt-1">
-                    <i className="ri-wifi-off-line" />
-                    Offline mode
-                  </span>
-                )}
               </div>
               <button
                 type="button"

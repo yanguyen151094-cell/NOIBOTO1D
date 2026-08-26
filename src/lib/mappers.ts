@@ -217,8 +217,9 @@ export function mapStaffPost(row: Record<string, unknown>): StaffPost {
   return {
     id: row.id as string,
     staffId: row.staff_id as string,
-    staffName: (row.staff_name as string) ?? "",
-    staffAvatar: (row.staff_avatar as string) ?? "",
+    authorId: (row.author_id as string) ?? (row.staff_id as string),
+    authorName: (row.author_name as string) ?? (row.staff_name as string) ?? "",
+    authorAvatar: (row.author_avatar as string) ?? (row.staff_avatar as string) ?? "",
     content: (row.content as string) ?? "",
     imageUrl: (row.image_url as string) ?? undefined,
     createdAt: (row.created_at as string) ?? "",

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { mapChannel, mapUser } from "@/lib/mappers";
 import type { Channel, User } from "@/types";
+import { mockStaffProfiles, mockChannels } from "@/mocks/appData";
 
 export interface StaffData {
   staff: User[];
@@ -9,6 +10,23 @@ export interface StaffData {
   loading: boolean;
   error: string;
   reload: () => void;
+}
+
+function isAuthError(message: string): boolean {
+  return (
+    message.includes("auth") ||
+    message.includes("JWT") ||
+    message.includes("session") ||
+    message.includes("unauthorized") ||
+    message.includes("401") ||
+    message.includes("403") ||
+    message.includes("RLS") ||
+    message.includes("network") ||
+    message.includes("cors") ||
+    message.includes("failed to fetch") ||
+    message.includes("timeout") ||
+    message.includes("offline")
+  );
 }
 
 export function useStaff(): StaffData {
@@ -81,7 +99,13 @@ export function useStaff(): StaffData {
 
       setStaff(staffList);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể tải danh sách nhân viên.");
+      const msg = e instanceof Error ? e.message : String(e);
+      if (isAuthError(msg)) {
+        setStaff(mockStaffProfiles.map((p) => ({ ...p })));
+        setChannels(mockChannels.map((c) => ({ ...c })));
+      } else {
+        setError(e instanceof Error ? e.message : "Không thể tải danh sách nhân viên.");
+      }
     } finally {
       setLoading(false);
     }

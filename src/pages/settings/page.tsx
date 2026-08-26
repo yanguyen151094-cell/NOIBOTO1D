@@ -7,7 +7,6 @@ const LOGO_URL = "https://static.readdy.ai/image/b107d501ab31adf698875488b112872
 
 export default function Settings() {
   const { currentUser } = useAuth();
-  const isOffline = !!localStorage.getItem("offline_user");
 
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
@@ -38,11 +37,6 @@ export default function Settings() {
     }
     if (newPw !== confirmPw) {
       setPwError("Mật khẩu mới không khớp.");
-      return;
-    }
-
-    if (isOffline) {
-      setPwError("Đang dùng chế độ offline — không thể đổi mật khẩu. Vui lòng đăng nhập qua Supabase.");
       return;
     }
 
@@ -112,18 +106,6 @@ export default function Settings() {
             </div>
           </div>
 
-          {isOffline && (
-            <div className="mb-4 rounded-md bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800 flex items-start gap-2">
-              <i className="ri-wifi-off-line shrink-0 mt-0.5" />
-              <div>
-                <p className="font-medium">Chế độ offline</p>
-                <p className="text-xs mt-0.5 text-amber-700">
-                  Bạn đang dùng chế độ offline. Đổi mật khẩu cần đăng nhập qua Supabase.
-                </p>
-              </div>
-            </div>
-          )}
-
           <form onSubmit={changePassword} className="space-y-3">
             <p className="text-sm font-semibold text-foreground-800">Đổi mật khẩu</p>
             <PasswordInput label="Mật khẩu hiện tại" value={currentPw} onChange={setCurrentPw} />
@@ -137,7 +119,7 @@ export default function Settings() {
             )}
             <button
               type="submit"
-              disabled={pwLoading || isOffline}
+              disabled={pwLoading}
               className="flex items-center gap-2 px-4 py-2.5 rounded-md bg-primary-500 text-white text-sm font-medium hover:bg-primary-600 cursor-pointer whitespace-nowrap disabled:opacity-50 transition-colors"
             >
               {pwLoading ? (
@@ -204,9 +186,9 @@ export default function Settings() {
                 value={window.location.hostname}
               />
               <InfoRow
-                icon={isOffline ? "ri-wifi-off-line" : "ri-wifi-line"}
+                icon="ri-wifi-line"
                 label="Chế độ"
-                value={isOffline ? "Offline (admin)" : "Online (Supabase Auth)"}
+                value="Online (Supabase Auth)"
               />
             </div>
           </div>

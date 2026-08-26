@@ -6,16 +6,6 @@ async function requireUserId(): Promise<string> {
     data: { user },
   } = await supabase.auth.getUser();
   if (user) return user.id;
-  // Fallback for offline admin
-  const offlineUser = localStorage.getItem("offline_user");
-  if (offlineUser) {
-    try {
-      const parsed = JSON.parse(offlineUser);
-      if (parsed?.id) return parsed.id;
-    } catch {
-      // ignore parse error
-    }
-  }
   throw new Error("Chưa đăng nhập.");
 }
 
@@ -96,10 +86,7 @@ interface ManageUsersPayload {
 }
 
 export async function callManageUsers(payload: ManageUsersPayload): Promise<{ ok?: boolean }> {
-  const isOffline = !!localStorage.getItem("offline_user");
-  const body = isOffline
-    ? { ...payload, offlineAdmin: true, offlineSecret: "TO1D-2024-OFFLINE" }
-    : payload;
+  const body = payload;
   const { data, error } = await supabase.functions.invoke("manage-users", { body });
   if (error) throw new Error(error.message);
   // Now Edge Function always returns 200; check ok flag in body
@@ -388,14 +375,44 @@ export async function deleteCustomerAccount(id: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function createStaffPost(content: string, imageUrl?: string): Promise<void> {
+export async function createStaffPost(
+  wallOwnerId: string,
+  authorName: string,
+  authorAvatar: string,
+  content: string,
+  imageUrl?: string
+): Promise<void> {
   const userId = await requireUserId();
   const { error } = await supabase.from("staff_posts").insert({
-    staff_id: userId,
+    staff_id: wallOwnerId,
+    author_id: userId,
+    author_name: authorName,
+    author_avatar: authorAvatar,
     content,
     image_url: imageUrl ?? null,
   });
   if (error) throw error;
+
+  // Thông báo cho chủ tường nếu người khác đăng bài lên tường của họ
+  if (wallOwnerId !== userId) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("name")
+      .eq("id", userId)
+      .maybeSingle();
+    const name = profile?.name ?? authorName;
+    const { error: ntfError } = await supabase.from("notifications").insert({
+      user_id: wallOwnerId,
+      type: "comment",
+      title: `${name} đã đăng bài lên tường của bạn`,
+      content: content.slice(0, 200),
+      is_read: false,
+      created_at: new Date().toISOString(),
+    });
+    if (ntfError) {
+      console.warn("Không thể tạo thông báo:", ntfError.message);
+    }
+  }
 }
 
 export async function deleteStaffPost(id: string): Promise<void> {

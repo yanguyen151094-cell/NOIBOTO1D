@@ -191,8 +191,9 @@ export interface CustomerAccount {
 export interface StaffPost {
   id: string;
   staffId: string;
-  staffName: string;
-  staffAvatar: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar: string;
   content: string;
   imageUrl?: string;
   createdAt: string;

@@ -13,15 +13,6 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const EMAIL_DOMAIN = "cskh.local";
 
-// Offline admin credentials for emergency fallback
-const OFFLINE_ADMIN = {
-  username: "admin",
-  password: "admin123",
-  id: "3f4e19d1-016a-462f-ac80-a4488c5eff45",
-  name: "Quản trị viên",
-  role: "admin" as Role,
-};
-
 interface ProfileRow {
   id: string;
   name: string | null;
@@ -75,26 +66,9 @@ function translateAuthError(message: string): string {
     return "Bạn thao tác quá nhanh. Vui lòng thử lại sau ít phút.";
   }
   if (lower.includes("network") || lower.includes("fetch") || lower.includes("cors") || lower.includes("failed to fetch")) {
-    return "Không thể kết nối đến máy chủ xác thực. Nếu bạn đang dùng domain tùy chỉnh, hãy thử đăng nhập offline với tài khoản admin / admin123.";
+    return "Không thể kết nối đến máy chủ xác thực. Vui lòng kiểm tra mạng.";
   }
   return "Đăng nhập thất bại. Vui lòng thử lại.";
-}
-
-function getOfflineAdminUser(): User {
-  return {
-    id: OFFLINE_ADMIN.id,
-    name: OFFLINE_ADMIN.name,
-    username: OFFLINE_ADMIN.username,
-    role: OFFLINE_ADMIN.role,
-    active: true,
-    presence: "online",
-    lastActive: new Date().toISOString(),
-    avatar: "",
-    assignedChannelIds: [],
-    customersHandled: 0,
-    messagesReplied: 0,
-    avgResponseMinutes: 0,
-  };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -108,16 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
       const userId = data.session?.user?.id;
       if (!userId) {
-        // Check offline login
-        const offlineUser = localStorage.getItem("offline_user");
-        if (offlineUser) {
-          try {
-            const parsed = JSON.parse(offlineUser) as User;
-            setCurrentUser(parsed);
-          } catch {
-            localStorage.removeItem("offline_user");
-          }
-        }
+        setCurrentUser(null);
         setLoading(false);
         return;
       }
@@ -166,46 +131,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const normalizedUsername = username.trim().toLowerCase();
     const email = `${normalizedUsername}@${EMAIL_DOMAIN}`;
 
-    // Offline fallback check FIRST — if username/password match offline admin, always allow
-    if (normalizedUsername === OFFLINE_ADMIN.username && password === OFFLINE_ADMIN.password) {
-      console.warn("[Auth] Using offline admin login (domain bypass)");
-      const offlineUser = getOfflineAdminUser();
-      setCurrentUser(offlineUser);
-      if (remember) {
-        localStorage.setItem("offline_user", JSON.stringify(offlineUser));
-      }
-      return { ok: true, message: "" };
-    }
-
     try {
-      // Try Supabase Auth
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      
       if (error) {
-        console.error("[Auth] Supabase login error:", error.message, error);
-        // If the user typed admin/admin123 but Supabase still errored (e.g. CORS/domain block), fallback
-        if (normalizedUsername === OFFLINE_ADMIN.username && password === OFFLINE_ADMIN.password) {
-          const offlineUser = getOfflineAdminUser();
-          setCurrentUser(offlineUser);
-          if (remember) {
-            localStorage.setItem("offline_user", JSON.stringify(offlineUser));
-          }
-          return { ok: true, message: "" };
-        }
         return { ok: false, message: translateAuthError(error.message) };
       }
 
       const userId = data.user?.id;
       if (!userId) {
-        // Fallback for missing userId but no error (rare)
-        if (normalizedUsername === OFFLINE_ADMIN.username && password === OFFLINE_ADMIN.password) {
-          const offlineUser = getOfflineAdminUser();
-          setCurrentUser(offlineUser);
-          if (remember) {
-            localStorage.setItem("offline_user", JSON.stringify(offlineUser));
-          }
-          return { ok: true, message: "" };
-        }
         return { ok: false, message: "Đăng nhập thất bại. Vui lòng thử lại." };
       }
 
@@ -232,36 +165,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .update({ presence: "online", last_active: new Date().toISOString() })
         .eq("id", userId);
 
-      // Check if we should redirect back to a custom domain
-      if (typeof window !== "undefined") {
-        const redirectUrl = new URLSearchParams(window.location.search).get("redirect");
-        if (redirectUrl && window.location.hostname.includes("vercel.app")) {
-          // Redirect back to custom domain with success flag
-          const separator = redirectUrl.includes("?") ? "&" : "?";
-          window.location.href = `${redirectUrl}${separator}login_success=1`;
-          return { ok: true, message: "" };
-        }
-      }
-
       return { ok: true, message: "" };
     } catch (err) {
-      console.error("[Auth] Unexpected login error:", err);
-      // If network/CORS error, fallback to offline admin if credentials match
-      if (normalizedUsername === OFFLINE_ADMIN.username && password === OFFLINE_ADMIN.password) {
-        const offlineUser = getOfflineAdminUser();
-        setCurrentUser(offlineUser);
-        if (remember) {
-          localStorage.setItem("offline_user", JSON.stringify(offlineUser));
-        }
-        return { ok: true, message: "" };
-      }
       return { ok: false, message: "Không thể kết nối đến máy chủ. Vui lòng kiểm tra mạng hoặc thử lại." };
     }
   };
 
   const logout = async () => {
     await supabase.auth.signOut();
-    localStorage.removeItem("offline_user");
     setCurrentUser(null);
   };
 
