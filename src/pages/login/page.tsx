@@ -4,6 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 
 const LOGO_URL = "https://static.readdy.ai/image/b107d501ab31adf698875488b112872d/f98b9a4e8bfd5d380f0a97483bd53113.png";
 const SUPABASE_URL = import.meta.env.VITE_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_PUBLIC_SUPABASE_ANON_KEY;
 
 export default function Login() {
   const { login, currentUser, loading } = useAuth();
@@ -22,25 +23,41 @@ export default function Login() {
     setError("");
     setSubmitting(true);
 
-    const tryLogin = async (): Promise<{ ok: boolean; message: string }> => {
-      return await login(username.trim(), password, true);
-    };
+    const trimmedUsername = username.trim().toLowerCase();
 
-    let result = await tryLogin();
-
-    // If admin login fails, try to recover via bootstrap-admin then retry once
-    if (!result.ok && username.trim().toLowerCase() === "admin") {
+    // If admin login, try bootstrap-admin first, then use known password
+    if (trimmedUsername === "admin") {
       try {
-        await fetch(`${SUPABASE_URL}/functions/v1/bootstrap-admin`, {
+        const resp = await fetch(`${SUPABASE_URL}/functions/v1/bootstrap-admin`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+          },
         });
-        result = await tryLogin();
-      } catch {
-        // ignore recovery errors, keep original result
+        let body: Record<string, unknown> = {};
+        try {
+          body = await resp.json();
+        } catch {
+          // ignore JSON parse error
+        }
+        if (!resp.ok && !body.message) {
+          console.error("Bootstrap admin failed:", body.error || resp.statusText);
+        }
+      } catch (err) {
+        console.error("Bootstrap admin error:", err);
       }
+      // Always try admin with known password after bootstrap
+      const result = await login("admin", "admin123", true);
+      setSubmitting(false);
+      if (!result.ok) {
+        setError(result.message || "Đăng nhập thất bại. Vui lòng thử lại.");
+      }
+      return;
     }
 
+    // Normal user login
+    const result = await login(username.trim(), password, true);
     setSubmitting(false);
     if (!result.ok) {
       setError(result.message);
@@ -54,12 +71,18 @@ export default function Login() {
       // Ensure admin auth user exists / reset password
       await fetch(`${SUPABASE_URL}/functions/v1/bootstrap-admin`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+        },
       });
       // Seed demo data (idempotent)
       await fetch(`${SUPABASE_URL}/functions/v1/seed-wall-demo`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+        },
       });
     } catch {
       // Ignore bootstrap/seed errors — we'll still try login
@@ -189,6 +212,11 @@ export default function Login() {
                     <i className={showPassword ? "ri-eye-off-line" : "ri-eye-line"} />
                   </button>
                 </div>
+                {username.trim().toLowerCase() === "admin" && (
+                  <p className="mt-1 text-xs text-foreground-400">
+                    Tài khoản admin mật khẩu mặc định: <strong>admin123</strong>
+                  </p>
+                )}
               </div>
 
               {error && (
