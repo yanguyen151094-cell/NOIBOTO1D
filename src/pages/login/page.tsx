@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 
 const LOGO_URL = "https://static.readdy.ai/image/b107d501ab31adf698875488b112872d/f98b9a4e8bfd5d380f0a97483bd53113.png";
+const SUPABASE_URL = "https://defffgyrdexrydrfnura.supabase.co";
 
 export default function Login() {
   const { login, currentUser, loading } = useAuth();
@@ -12,6 +13,35 @@ export default function Login() {
   const [error, setError] = useState("");
   const [debug, setDebug] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [networkOk, setNetworkOk] = useState<boolean | null>(null);
+
+  // Health check on mount
+  useEffect(() => {
+    checkNetwork();
+  }, []);
+
+  async function checkNetwork() {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/health`, {
+        method: "GET",
+        signal: controller.signal,
+        mode: "cors",
+      }).catch(async () => {
+        // Fallback: try HEAD request to base URL
+        return fetch(SUPABASE_URL, {
+          method: "HEAD",
+          signal: controller.signal,
+          mode: "cors",
+        });
+      });
+      clearTimeout(timeout);
+      setNetworkOk(res.ok || res.status === 404 || res.status === 401 || res.status === 400);
+    } catch {
+      setNetworkOk(false);
+    }
+  }
 
   if (currentUser) {
     return <Navigate to={currentUser.role === "admin" ? "/" : "/inbox"} replace />;
@@ -177,6 +207,31 @@ export default function Login() {
                 </p>
               </div>
             </div>
+
+            {/* Network status indicator */}
+            {networkOk === false && (
+              <div className="mb-4 flex items-center gap-2 px-3 py-2.5 rounded-md bg-red-500/10 border border-red-200/50 text-red-600 text-xs">
+                <i className="ri-wifi-off-line shrink-0" />
+                <div>
+                  <p className="font-medium">Không thể kết nối đến máy chủ.</p>
+                  <p className="mt-0.5">
+                    Vui lòng kiểm tra mạng hoặc thử đổi DNS sang 8.8.8.8 (Google) hoặc 1.1.1.1 (Cloudflare).
+                  </p>
+                </div>
+              </div>
+            )}
+            {networkOk === true && (
+              <div className="mb-4 flex items-center gap-2 px-3 py-2 rounded-md bg-emerald-500/10 border border-emerald-200/50 text-emerald-600 text-xs">
+                <i className="ri-wifi-line shrink-0" />
+                <span>Kết nối máy chủ OK.</span>
+              </div>
+            )}
+            {networkOk === null && (
+              <div className="mb-4 flex items-center gap-2 px-3 py-2 rounded-md bg-foreground-100 border border-foreground-200 text-foreground-500 text-xs">
+                <i className="ri-loader-2-line animate-spin shrink-0" />
+                <span>Đang kiểm tra kết nối...</span>
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
