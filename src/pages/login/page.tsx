@@ -103,38 +103,6 @@ export default function Login() {
     }
   };
 
-  const handleQuickLogin = async () => {
-    setError("");
-    setDebug("");
-    setSubmitting(true);
-
-    const adminPassword = "admin123";
-
-    // Step 1: try login
-    setDebug("Đang đăng nhập...");
-    let result = await login("admin", adminPassword, true);
-    if (!result.ok) {
-      if (result.message.includes("không đúng") || result.message.includes("thất bại") || result.message.includes("Không thể kết nối")) {
-        setDebug("Đang tạo tài khoản admin...");
-        const signupResult = await tryCreateAdmin(adminPassword);
-        if (signupResult.ok) {
-          setDebug("Tạo xong, đang đăng nhập...");
-          result = await login("admin", adminPassword, true);
-        } else if (signupResult.message.includes("đã tồn tại")) {
-          setDebug("Tài khoản đã tồn tại, đang thử lại...");
-          result = await login("admin", adminPassword, true);
-        } else {
-          setDebug(`Tạo tài khoản thất bại: ${signupResult.message}`);
-        }
-      }
-    }
-
-    setSubmitting(false);
-    if (!result.ok) {
-      setError(result.message || "Đăng nhập thất bại.");
-    }
-  };
-
   return (
     <div className="min-h-full flex bg-background-50">
       {/* Brand panel */}
@@ -278,11 +246,6 @@ export default function Login() {
                     <i className={showPassword ? "ri-eye-off-line" : "ri-eye-line"} />
                   </button>
                 </div>
-                {username.trim().toLowerCase() === "admin" && (
-                  <p className="mt-1 text-xs text-foreground-400">
-                    Tài khoản admin mật khẩu mặc định: <strong>admin123</strong>
-                  </p>
-                )}
               </div>
 
               {error && (
@@ -314,34 +277,6 @@ export default function Login() {
                 )}
               </button>
             </form>
-
-            <div className="relative flex items-center py-4">
-              <div className="flex-1 border-t border-background-200" />
-              <span className="px-3 text-xs text-foreground-400">hoặc</span>
-              <div className="flex-1 border-t border-background-200" />
-            </div>
-
-            <button
-              type="button"
-              onClick={handleQuickLogin}
-              disabled={submitting}
-              className="w-full py-2.5 rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm font-semibold hover:bg-emerald-100 transition-colors cursor-pointer whitespace-nowrap disabled:opacity-60"
-            >
-              {submitting ? (
-                <span className="flex items-center justify-center gap-2">
-                  <i className="ri-loader-4-line animate-spin" />
-                  Đang vào...
-                </span>
-              ) : (
-                <span className="flex items-center justify-center gap-2">
-                  <i className="ri-login-box-line" />
-                  Vào nhanh (demo) &mdash; admin / admin123
-                </span>
-              )}
-            </button>
-            <p className="mt-2 text-center text-xs text-foreground-400">
-              Tự động tạo tài khoản mẫu nếu chưa có.
-            </p>
           </div>
         )}
       </div>
