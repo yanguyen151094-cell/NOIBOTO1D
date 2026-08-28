@@ -3,8 +3,6 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 
 const LOGO_URL = "https://static.readdy.ai/image/b107d501ab31adf698875488b112872d/f98b9a4e8bfd5d380f0a97483bd53113.png";
-const SUPABASE_URL = import.meta.env.VITE_PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_PUBLIC_SUPABASE_ANON_KEY;
 
 export default function Login() {
   const { login, currentUser, loading } = useAuth();
@@ -12,6 +10,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [debug, setDebug] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   if (currentUser) {
@@ -21,38 +20,37 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setDebug("");
     setSubmitting(true);
 
     const trimmedUsername = username.trim().toLowerCase();
 
-    // If admin login, try bootstrap-admin first, then use known password
+    // Admin login: try with admin123 first, if fails try to sign up
     if (trimmedUsername === "admin") {
-      try {
-        const resp = await fetch(`${SUPABASE_URL}/functions/v1/bootstrap-admin`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-          },
-        });
-        let body: Record<string, unknown> = {};
-        try {
-          body = await resp.json();
-        } catch {
-          // ignore JSON parse error
-        }
-        if (!resp.ok && !body.message) {
-          console.error("Bootstrap admin failed:", body.error || resp.statusText);
-        }
-      } catch (err) {
-        console.error("Bootstrap admin error:", err);
+      const adminPassword = "admin123";
+      // Try login first
+      let result = await login("admin", adminPassword, true);
+      if (result.ok) {
+        setSubmitting(false);
+        return;
       }
-      // Always try admin with known password after bootstrap
-      const result = await login("admin", "admin123", true);
+      // If login failed with "invalid credentials", try sign up (auto-create admin)
+      if (result.message.includes("không đúng") || result.message.includes("thất bại")) {
+        setDebug("Đang tạo tài khoản admin tự động...");
+        const signupResult = await tryCreateAdmin(adminPassword);
+        if (signupResult.ok) {
+          setDebug("Tạo xong, đang đăng nhập lại...");
+          result = await login("admin", adminPassword, true);
+          if (result.ok) {
+            setSubmitting(false);
+            return;
+          }
+        } else {
+          setDebug(`Tạo tài khoản thất bại: ${signupResult.message}`);
+        }
+      }
       setSubmitting(false);
-      if (!result.ok) {
-        setError(result.message || "Đăng nhập thất bại. Vui lòng thử lại.");
-      }
+      setError(result.message || "Đăng nhập thất bại.");
       return;
     }
 
@@ -66,31 +64,26 @@ export default function Login() {
 
   const handleQuickLogin = async () => {
     setError("");
+    setDebug("");
     setSubmitting(true);
-    try {
-      // Ensure admin auth user exists / reset password
-      await fetch(`${SUPABASE_URL}/functions/v1/bootstrap-admin`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-      });
-      // Seed demo data (idempotent)
-      await fetch(`${SUPABASE_URL}/functions/v1/seed-wall-demo`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-      });
-    } catch {
-      // Ignore bootstrap/seed errors — we'll still try login
+
+    const adminPassword = "admin123";
+    let result = await login("admin", adminPassword, true);
+    if (!result.ok) {
+      if (result.message.includes("không đúng") || result.message.includes("thất bại")) {
+        setDebug("Đang tạo tài khoản admin...");
+        const signupResult = await tryCreateAdmin(adminPassword);
+        if (signupResult.ok) {
+          setDebug("Tạo xong, đang đăng nhập...");
+          result = await login("admin", adminPassword, true);
+        } else {
+          setDebug(`Tạo tài khoản thất bại: ${signupResult.message}`);
+        }
+      }
     }
-    const result = await login("admin", "admin123", true);
     setSubmitting(false);
     if (!result.ok) {
-      setError(result.message);
+      setError(result.message || "Đăng nhập thất bại.");
     }
   };
 
@@ -226,6 +219,13 @@ export default function Login() {
                 </div>
               )}
 
+              {debug && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-blue-500/10 border border-blue-200/50 text-blue-600 text-xs">
+                  <i className="ri-loader-4-line animate-spin shrink-0" />
+                  <span>{debug}</span>
+                </div>
+              )}
+
               <button
                 type="submit"
                 disabled={submitting}
@@ -267,11 +267,61 @@ export default function Login() {
               )}
             </button>
             <p className="mt-2 text-center text-xs text-foreground-400">
-              Tự động tạo dữ liệu mẫu nếu chưa có.
+              Tự động tạo tài khoản mẫu nếu chưa có.
             </p>
           </div>
         )}
       </div>
     </div>
   );
+}
+
+async function tryCreateAdmin(password: string): Promise<{ ok: boolean; message: string }> {
+  const { createClient } = await import("@supabase/supabase-js");
+  const url = "https://defffgyrdexrydrfnura.supabase.co";
+  const key = "sb_publishable_UMuOwwpDwOZKrwWOSFJjvQ_tBoWq9eK";
+  const supabase = createClient(url, key, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email: "admin@cskh.local",
+      password,
+      options: {
+        data: { username: "admin", name: "Quản trị viên", role: "admin" },
+      },
+    });
+
+    if (error) {
+      if (error.message.includes("already registered") || error.message.includes("already exists")) {
+        return { ok: false, message: "Tài khoản đã tồn tại nhưng mật khẩu không đúng." };
+      }
+      return { ok: false, message: error.message };
+    }
+
+    const userId = data.user?.id;
+    if (!userId) {
+      return { ok: false, message: "Không tạo được tài khoản." };
+    }
+
+    // Insert profile
+    const { error: profileErr } = await supabase.from("profiles").insert({
+      id: userId,
+      username: "admin",
+      name: "Quản trị viên",
+      role: "admin",
+      active: true,
+      presence: "offline",
+      avatar: null,
+    });
+
+    if (profileErr) {
+      return { ok: false, message: `Tạo profile thất bại: ${profileErr.message}` };
+    }
+
+    return { ok: true, message: "Tạo tài khoản thành công." };
+  } catch (e) {
+    return { ok: false, message: `Lỗi không xác định: ${String(e)}` };
+  }
 }
