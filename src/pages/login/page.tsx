@@ -25,17 +25,20 @@ export default function Login() {
 
     const trimmedUsername = username.trim().toLowerCase();
 
-    // Admin login: try with admin123 first, if fails try to sign up
+    // Admin login: auto-create if needed, then sign in with default password
     if (trimmedUsername === "admin") {
       const adminPassword = "admin123";
-      // Try login first
+
+      // Step 1: try login directly
+      setDebug("Đang đăng nhập...");
       let result = await login("admin", adminPassword, true);
       if (result.ok) {
         setSubmitting(false);
         return;
       }
-      // If login failed with "invalid credentials", try sign up (auto-create admin)
-      if (result.message.includes("không đúng") || result.message.includes("thất bại")) {
+
+      // If failed due to invalid credentials, try to auto-create admin
+      if (result.message.includes("không đúng") || result.message.includes("thất bại") || result.message.includes("Không thể kết nối")) {
         setDebug("Đang tạo tài khoản admin tự động...");
         const signupResult = await tryCreateAdmin(adminPassword);
         if (signupResult.ok) {
@@ -45,10 +48,18 @@ export default function Login() {
             setSubmitting(false);
             return;
           }
+        } else if (signupResult.message.includes("đã tồn tại")) {
+          setDebug("Tài khoản đã tồn tại, đang thử đăng nhập lại...");
+          result = await login("admin", adminPassword, true);
+          if (result.ok) {
+            setSubmitting(false);
+            return;
+          }
         } else {
           setDebug(`Tạo tài khoản thất bại: ${signupResult.message}`);
         }
       }
+
       setSubmitting(false);
       setError(result.message || "Đăng nhập thất bại.");
       return;
@@ -68,19 +79,26 @@ export default function Login() {
     setSubmitting(true);
 
     const adminPassword = "admin123";
+
+    // Step 1: try login
+    setDebug("Đang đăng nhập...");
     let result = await login("admin", adminPassword, true);
     if (!result.ok) {
-      if (result.message.includes("không đúng") || result.message.includes("thất bại")) {
+      if (result.message.includes("không đúng") || result.message.includes("thất bại") || result.message.includes("Không thể kết nối")) {
         setDebug("Đang tạo tài khoản admin...");
         const signupResult = await tryCreateAdmin(adminPassword);
         if (signupResult.ok) {
           setDebug("Tạo xong, đang đăng nhập...");
+          result = await login("admin", adminPassword, true);
+        } else if (signupResult.message.includes("đã tồn tại")) {
+          setDebug("Tài khoản đã tồn tại, đang thử lại...");
           result = await login("admin", adminPassword, true);
         } else {
           setDebug(`Tạo tài khoản thất bại: ${signupResult.message}`);
         }
       }
     }
+
     setSubmitting(false);
     if (!result.ok) {
       setError(result.message || "Đăng nhập thất bại.");
@@ -133,7 +151,7 @@ export default function Login() {
           </ul>
         </div>
 
-        <p className="relative text-xs text-white/50">© 2026 TỔ 1D</p>
+        <p className="relative text-xs text-white/50">&copy; 2026 TỔ 1D</p>
       </div>
 
       {/* Form panel */}
@@ -262,7 +280,7 @@ export default function Login() {
               ) : (
                 <span className="flex items-center justify-center gap-2">
                   <i className="ri-login-box-line" />
-                  Vào nhanh (demo) — admin / admin123
+                  Vào nhanh (demo) &mdash; admin / admin123
                 </span>
               )}
             </button>
@@ -284,18 +302,36 @@ async function tryCreateAdmin(password: string): Promise<{ ok: boolean; message:
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
+  // Retry helper for transient network errors
+  const retry = async <T,>(fn: () => Promise<T>, maxAttempts = 2): Promise<T> => {
+    let lastErr: unknown;
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        return await fn();
+      } catch (e) {
+        lastErr = e;
+        if (i < maxAttempts - 1) {
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+      }
+    }
+    throw lastErr;
+  };
+
   try {
-    const { data, error } = await supabase.auth.signUp({
-      email: "admin@cskh.local",
-      password,
-      options: {
-        data: { username: "admin", name: "Quản trị viên", role: "admin" },
-      },
-    });
+    const { data, error } = await retry(() =>
+      supabase.auth.signUp({
+        email: "admin@cskh.local",
+        password,
+        options: {
+          data: { username: "admin", name: "Quản trị viên", role: "admin" },
+        },
+      })
+    );
 
     if (error) {
-      if (error.message.includes("already registered") || error.message.includes("already exists")) {
-        return { ok: false, message: "Tài khoản đã tồn tại nhưng mật khẩu không đúng." };
+      if (error.message.includes("already registered") || error.message.includes("already exists") || error.message.includes("User already registered")) {
+        return { ok: false, message: "Tài khoản đã tồn tại." };
       }
       return { ok: false, message: error.message };
     }
@@ -306,15 +342,17 @@ async function tryCreateAdmin(password: string): Promise<{ ok: boolean; message:
     }
 
     // Insert profile
-    const { error: profileErr } = await supabase.from("profiles").insert({
-      id: userId,
-      username: "admin",
-      name: "Quản trị viên",
-      role: "admin",
-      active: true,
-      presence: "offline",
-      avatar: null,
-    });
+    const { error: profileErr } = await retry(() =>
+      supabase.from("profiles").insert({
+        id: userId,
+        username: "admin",
+        name: "Quản trị viên",
+        role: "admin",
+        active: true,
+        presence: "offline",
+        avatar: null,
+      })
+    );
 
     if (profileErr) {
       return { ok: false, message: `Tạo profile thất bại: ${profileErr.message}` };
@@ -322,6 +360,10 @@ async function tryCreateAdmin(password: string): Promise<{ ok: boolean; message:
 
     return { ok: true, message: "Tạo tài khoản thành công." };
   } catch (e) {
-    return { ok: false, message: `Lỗi không xác định: ${String(e)}` };
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("Failed to fetch") || msg.includes("fetch") || msg.includes("network") || msg.includes("NAME_NOT_RESOLVED") || msg.includes("Offline") || msg.includes("AbortError")) {
+      return { ok: false, message: "Không thể kết nối đến máy chủ. Vui lòng kiểm tra mạng và thử lại." };
+    }
+    return { ok: false, message: `Lỗi không xác định: ${msg}` };
   }
 }

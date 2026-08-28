@@ -65,10 +65,19 @@ function translateAuthError(message: string): string {
   if (lower.includes("rate limit")) {
     return "Bạn thao tác quá nhanh. Vui lòng thử lại sau ít phút.";
   }
-  if (lower.includes("network") || lower.includes("fetch") || lower.includes("cors") || lower.includes("failed to fetch")) {
-    return "Không thể kết nối đến máy chủ xác thực. Vui lòng kiểm tra mạng.";
+  if (lower.includes("network") || lower.includes("fetch") || lower.includes("cors") || lower.includes("failed to fetch") || lower.includes("name_not_resolved") || lower.includes("err_name")) {
+    return "Không thể kết nối đến máy chủ. Vui lòng kiểm tra mạng và thử lại.";
   }
   return "Đăng nhập thất bại. Vui lòng thử lại.";
+}
+
+async function doSignIn(email: string, password: string): Promise<{ data: { user: { id: string } | null } | null; error: { message: string } | null }> {
+  try {
+    return await supabase.auth.signInWithPassword({ email, password });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { data: null, error: { message: msg } };
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -131,44 +140,70 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const normalizedUsername = username.trim().toLowerCase();
     const email = `${normalizedUsername}@${EMAIL_DOMAIN}`;
 
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        return { ok: false, message: translateAuthError(error.message) };
+    // Try login with retry for transient network errors
+    let attempts = 0;
+    const maxAttempts = 2;
+    let lastError: { message: string } | null = null;
+
+    while (attempts < maxAttempts) {
+      attempts++;
+      try {
+        const { data, error } = await doSignIn(email, password);
+        if (error) {
+          const isNetworkError = translateAuthError(error.message).includes("Không thể kết nối");
+          if (isNetworkError && attempts < maxAttempts) {
+            await new Promise((r) => setTimeout(r, 1000));
+            continue;
+          }
+          lastError = error;
+          break;
+        }
+
+        const userId = data?.user?.id;
+        if (!userId) {
+          return { ok: false, message: "Đăng nhập thất bại. Vui lòng thử lại." };
+        }
+
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", userId)
+          .maybeSingle();
+
+        if (!profile) {
+          await supabase.auth.signOut();
+          return { ok: false, message: "Không tìm thấy hồ sơ người dùng." };
+        }
+
+        if (!profile.active) {
+          await supabase.auth.signOut();
+          return { ok: false, message: "Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên." };
+        }
+
+        setCurrentUser(await loadUserWithAccess(profile as ProfileRow));
+
+        await supabase
+          .from("profiles")
+          .update({ presence: "online", last_active: new Date().toISOString() })
+          .eq("id", userId);
+
+        return { ok: true, message: "" };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const isNetworkError = translateAuthError(msg).includes("Không thể kết nối");
+        if (isNetworkError && attempts < maxAttempts) {
+          await new Promise((r) => setTimeout(r, 1000));
+          continue;
+        }
+        return { ok: false, message: translateAuthError(msg) };
       }
-
-      const userId = data.user?.id;
-      if (!userId) {
-        return { ok: false, message: "Đăng nhập thất bại. Vui lòng thử lại." };
-      }
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .maybeSingle();
-
-      if (!profile) {
-        await supabase.auth.signOut();
-        return { ok: false, message: "Không tìm thấy hồ sơ người dùng." };
-      }
-
-      if (!profile.active) {
-        await supabase.auth.signOut();
-        return { ok: false, message: "Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên." };
-      }
-
-      setCurrentUser(await loadUserWithAccess(profile as ProfileRow));
-
-      await supabase
-        .from("profiles")
-        .update({ presence: "online", last_active: new Date().toISOString() })
-        .eq("id", userId);
-
-      return { ok: true, message: "" };
-    } catch (err) {
-      return { ok: false, message: "Không thể kết nối đến máy chủ. Vui lòng kiểm tra mạng hoặc thử lại." };
     }
+
+    if (lastError) {
+      return { ok: false, message: translateAuthError(lastError.message) };
+    }
+
+    return { ok: false, message: "Không thể kết nối đến máy chủ. Vui lòng kiểm tra mạng và thử lại." };
   };
 
   const logout = async () => {
