@@ -21,6 +21,7 @@ export default function Accounts() {
   const [search, setSearch] = useState("");
   const [platform, setPlatform] = useState("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "alive" | "dead">("all");
+  const [leaderFilter, setLeaderFilter] = useState<"all" | "leader" | "none">("all");
   const [editing, setEditing] = useState<AccountVault | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<AccountVault | null>(null);
@@ -43,10 +44,12 @@ export default function Accounts() {
 
   const filtered = (items ?? []).filter((a) => {
     const q = search.trim().toLowerCase();
-    if (q && !`${a.label} ${a.username} ${a.email}`.toLowerCase().includes(q)) return false;
+    if (q && !`${a.label} ${a.username} ${a.email} ${a.channelStatus}`.toLowerCase().includes(q)) return false;
     if (platform !== "all" && a.platform !== platform) return false;
     if (statusFilter === "alive" && a.isDead) return false;
     if (statusFilter === "dead" && !a.isDead) return false;
+    if (leaderFilter === "leader" && !a.providedByLeader) return false;
+    if (leaderFilter === "none" && a.providedByLeader) return false;
     return true;
   });
 
@@ -118,6 +121,23 @@ export default function Accounts() {
             active={statusFilter === "dead"}
             label={`Die (${deadCount})`}
             onClick={() => setStatusFilter("dead")}
+          />
+        </div>
+        <div className="flex items-center gap-1 bg-background-100 rounded-full px-1 py-1">
+          <FilterChip
+            active={leaderFilter === "all"}
+            label="Tất cả nguồn"
+            onClick={() => setLeaderFilter("all")}
+          />
+          <FilterChip
+            active={leaderFilter === "leader"}
+            label="Tổ trưởng cấp"
+            onClick={() => setLeaderFilter("leader")}
+          />
+          <FilterChip
+            active={leaderFilter === "none"}
+            label="Tự có"
+            onClick={() => setLeaderFilter("none")}
           />
         </div>
       </div>
@@ -302,13 +322,31 @@ function VaultCard({
             <i className={`${meta.icon} text-xl ${meta.color}`} />
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <p className="font-semibold text-foreground-900 truncate">
                 {item.label || "Chưa đặt tên"}
               </p>
               {item.isDead && (
                 <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-semibold shrink-0">
                   Die
+                </span>
+              )}
+              {item.providedByLeader && (
+                <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-semibold shrink-0">
+                  Tổ trưởng cấp
+                </span>
+              )}
+              {item.channelStatus && item.channelStatus !== "normal" && (
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${
+                  item.channelStatus === "banned" ? "bg-red-100 text-red-700" :
+                  item.channelStatus === "restricted" ? "bg-orange-100 text-orange-700" :
+                  item.channelStatus === "checkpoint" ? "bg-yellow-100 text-yellow-700" :
+                  "bg-blue-100 text-blue-700"
+                }`}>
+                  {item.channelStatus === "banned" ? "Banned" :
+                   item.channelStatus === "restricted" ? "Hạn chế" :
+                   item.channelStatus === "checkpoint" ? "Checkpoint" :
+                   item.channelStatus}
                 </span>
               )}
             </div>
@@ -393,6 +431,8 @@ function VaultModal({
   const [twoFa, setTwoFa] = useState(initial?.twoFa ?? "");
   const [note, setNote] = useState(initial?.note ?? "");
   const [isDead, setIsDead] = useState(initial?.isDead ?? false);
+  const [providedByLeader, setProvidedByLeader] = useState(initial?.providedByLeader ?? false);
+  const [channelStatus, setChannelStatus] = useState(initial?.channelStatus ?? "normal");
 
   const submit = () => {
     onSave({
@@ -404,6 +444,8 @@ function VaultModal({
       twoFa,
       note: note.trim(),
       isDead,
+      providedByLeader,
+      channelStatus,
     });
   };
 
@@ -476,6 +518,50 @@ function VaultModal({
               }`}
             />
           </button>
+        </div>
+        <div className="flex items-center justify-between gap-3 py-2">
+          <div>
+            <p className="text-sm font-medium text-foreground-800">Tài khoản do tổ trưởng cấp</p>
+            <p className="text-xs text-foreground-400">Bật nếu tài khoản này do tổ trưởng cấp cho bạn</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setProvidedByLeader((v) => !v)}
+            className={`relative w-12 h-7 rounded-full transition-colors cursor-pointer ${
+              providedByLeader ? "bg-amber-500" : "bg-background-300"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow-sm transition-transform ${
+                providedByLeader ? "translate-x-5" : "translate-x-0"
+              }`}
+            />
+          </button>
+        </div>
+        <div>
+          <label className="block text-sm text-foreground-700 mb-1.5">Tình trạng kênh</label>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { value: "normal", label: "Bình thường" },
+              { value: "restricted", label: "Hạn chế" },
+              { value: "checkpoint", label: "Checkpoint" },
+              { value: "banned", label: "Banned" },
+              { value: "review", label: "Đang xem xét" },
+            ].map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setChannelStatus(opt.value)}
+                className={`px-2 py-2 rounded-md text-sm border cursor-pointer whitespace-nowrap ${
+                  channelStatus === opt.value
+                    ? "border-primary-400 bg-primary-100 text-primary-800"
+                    : "border-background-300 text-foreground-600 hover:bg-background-100"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
         <div>
           <label className="block text-sm text-foreground-700 mb-1.5">Ghi chú</label>

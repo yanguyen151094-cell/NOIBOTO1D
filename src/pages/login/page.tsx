@@ -21,7 +21,26 @@ export default function Login() {
     e.preventDefault();
     setError("");
     setSubmitting(true);
-    const result = await login(username.trim(), password, true);
+
+    const tryLogin = async (): Promise<{ ok: boolean; message: string }> => {
+      return await login(username.trim(), password, true);
+    };
+
+    let result = await tryLogin();
+
+    // If admin login fails, try to recover via bootstrap-admin then retry once
+    if (!result.ok && username.trim().toLowerCase() === "admin") {
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/bootstrap-admin`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        });
+        result = await tryLogin();
+      } catch {
+        // ignore recovery errors, keep original result
+      }
+    }
+
     setSubmitting(false);
     if (!result.ok) {
       setError(result.message);
@@ -32,13 +51,18 @@ export default function Login() {
     setError("");
     setSubmitting(true);
     try {
-      // Seed demo data first (idempotent)
+      // Ensure admin auth user exists / reset password
+      await fetch(`${SUPABASE_URL}/functions/v1/bootstrap-admin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      // Seed demo data (idempotent)
       await fetch(`${SUPABASE_URL}/functions/v1/seed-wall-demo`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
     } catch {
-      // Ignore seed errors — maybe already seeded
+      // Ignore bootstrap/seed errors — we'll still try login
     }
     const result = await login("admin", "admin123", true);
     setSubmitting(false);

@@ -12,6 +12,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Tổng quan", icon: "ri-dashboard-line", adminOnly: true },
   { to: "/inbox", label: "Hộp thư", icon: "ri-mail-line" },
   { to: "/team", label: "Phòng trò chuyện", icon: "ri-chat-smile-2-line" },
+  { to: "/karaoke", label: "Phòng hát", icon: "ri-mic-line" },
   { to: "/wall", label: "Tường cá nhân", icon: "ri-article-line" },
   { to: "/announcements", label: "Thông báo", icon: "ri-megaphone-line" },
   { to: "/plans", label: "Kế hoạch", icon: "ri-task-line" },

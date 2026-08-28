@@ -230,6 +230,8 @@ export interface AccountVaultInput {
   twoFa: string;
   note: string;
   isDead: boolean;
+  providedByLeader: boolean;
+  channelStatus: string;
 }
 
 export async function createAccountVault(input: AccountVaultInput): Promise<void> {
@@ -243,6 +245,8 @@ export async function createAccountVault(input: AccountVaultInput): Promise<void
     two_fa: input.twoFa,
     note: input.note,
     is_dead: input.isDead,
+    provided_by_leader: input.providedByLeader,
+    channel_status: input.channelStatus,
     created_by: userId,
   });
   if (error) throw error;
@@ -260,6 +264,8 @@ export async function updateAccountVault(id: string, input: AccountVaultInput): 
       two_fa: input.twoFa,
       note: input.note,
       is_dead: input.isDead,
+      provided_by_leader: input.providedByLeader,
+      channel_status: input.channelStatus,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
@@ -592,5 +598,143 @@ export async function updateReward(id: string, input: RewardInput): Promise<void
 
 export async function deleteReward(id: string): Promise<void> {
   const { error } = await supabase.from("staff_rewards").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// ===== Karaoke =====
+
+export function extractYoutubeId(input: string): string | null {
+  const trimmed = input.trim();
+  if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) return trimmed;
+  const m =
+    trimmed.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/) ||
+    trimmed.match(/youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/) ||
+    trimmed.match(/youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/) ||
+    trimmed.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
+export async function fetchYoutubeInfo(videoId: string): Promise<{ title: string; thumbnail: string }> {
+  const thumb = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+  try {
+    const res = await fetch(
+      `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`
+    );
+    if (!res.ok) throw new Error("bad");
+    const data = await res.json();
+    return { title: data.title ?? `Bài hát ${videoId}`, thumbnail: thumb };
+  } catch {
+    return { title: `Bài hát ${videoId}`, thumbnail: thumb };
+  }
+}
+
+export function checkVideoExists(videoId: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(true);
+    img.onerror = () => resolve(false);
+    img.src = `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg?nocache=${Date.now()}`;
+    setTimeout(() => resolve(false), 5000);
+  });
+}
+
+export async function createKaraokeRoom(name: string): Promise<string> {
+  const userId = await requireUserId();
+  const { data, error } = await supabase
+    .from("karaoke_rooms")
+    .insert({ name, created_by: userId })
+    .select("id")
+    .single();
+  if (error) throw error;
+  const roomId = data.id as string;
+  const { error: mErr } = await supabase
+    .from("karaoke_room_members")
+    .insert({ room_id: roomId, user_id: userId });
+  if (mErr) throw mErr;
+  return roomId;
+}
+
+export async function deleteKaraokeRoom(roomId: string): Promise<void> {
+  const { error } = await supabase.from("karaoke_rooms").delete().eq("id", roomId);
+  if (error) throw error;
+}
+
+export async function joinKaraokeRoom(roomId: string): Promise<void> {
+  const userId = await requireUserId();
+  const { error } = await supabase
+    .from("karaoke_room_members")
+    .insert({ room_id: roomId, user_id: userId });
+  if (error && !error.message.includes("duplicate")) throw error;
+}
+
+export async function addKaraokeSong(
+  roomId: string,
+  videoId: string,
+  title: string,
+  thumbnail: string
+): Promise<void> {
+  const userId = await requireUserId();
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("name")
+    .eq("id", userId)
+    .maybeSingle();
+  const { error } = await supabase.from("karaoke_queue").insert({
+    room_id: roomId,
+    video_id: videoId,
+    title,
+    thumbnail,
+    added_by: userId,
+    added_by_name: profile?.name ?? "",
+    status: "queued",
+  });
+  if (error) throw error;
+}
+
+export async function removeKaraokeSong(songId: string): Promise<void> {
+  const { error } = await supabase.from("karaoke_queue").delete().eq("id", songId);
+  if (error) throw error;
+}
+
+export async function playKaraokeSong(
+  roomId: string,
+  song: { id: string; videoId: string; title: string; thumbnail?: string }
+): Promise<void> {
+  // Đánh dấu các bài đang phát khác là đã phát
+  await supabase.from("karaoke_queue").update({ status: "played" }).eq("room_id", roomId).eq("status", "playing");
+  // Đánh dấu bài được chọn là đang phát
+  const { error } = await supabase.from("karaoke_queue").update({ status: "playing" }).eq("id", song.id);
+  if (error) throw error;
+  // Cập nhật phòng để người vào sau biết bài hiện tại
+  const { error: rErr } = await supabase
+    .from("karaoke_rooms")
+    .update({
+      current_video_id: song.videoId,
+      current_title: song.title,
+      current_thumb: song.thumbnail ?? null,
+      current_position: 0,
+      is_playing: true,
+    })
+    .eq("id", roomId);
+  if (rErr) throw rErr;
+}
+
+export async function updateKaraokePlayState(
+  roomId: string,
+  isPlaying: boolean,
+  position: number
+): Promise<void> {
+  const { error } = await supabase
+    .from("karaoke_rooms")
+    .update({ is_playing: isPlaying, current_position: position })
+    .eq("id", roomId);
+  if (error) throw error;
+}
+
+export async function sendKaraokeMessage(roomId: string, content: string): Promise<void> {
+  const userId = await requireUserId();
+  const { error } = await supabase
+    .from("karaoke_messages")
+    .insert({ room_id: roomId, sender_id: userId, content, sent_at: new Date().toISOString() });
   if (error) throw error;
 }

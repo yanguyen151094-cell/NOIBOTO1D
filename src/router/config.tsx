@@ -18,6 +18,7 @@ import Wall from "@/pages/wall/page";
 import Announcements from "@/pages/announcements/page";
 import Plans from "@/pages/plans/page";
 import Rewards from "@/pages/rewards/page";
+import Karaoke from "@/pages/karaoke/page";
 
 const routes: RouteObject[] = [
   {
@@ -44,6 +45,7 @@ const routes: RouteObject[] = [
       { path: "announcements", element: <Announcements /> },
       { path: "plans", element: <Plans /> },
       { path: "rewards", element: <Rewards /> },
+      { path: "karaoke", element: <Karaoke /> },
     ],
   },
   {

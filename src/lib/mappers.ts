@@ -12,6 +12,9 @@ import type {
   Customer,
   CustomerAccount,
   CustomerNote,
+  KaraokeMessage,
+  KaraokeRoom,
+  KaraokeSong,
   Message,
   MessageStatus,
   Plan,
@@ -186,6 +189,8 @@ export function mapAccountVault(row: Record<string, unknown>): AccountVault {
     createdAt: (row.created_at as string) ?? "",
     createdByName: (row.created_by_name as string) ?? undefined,
     isDead: (row.is_dead as boolean) ?? false,
+    providedByLeader: (row.provided_by_leader as boolean) ?? false,
+    channelStatus: (row.channel_status as string) ?? "normal",
   };
 }
 
@@ -276,5 +281,48 @@ export function mapReward(row: Record<string, unknown>): Reward {
     rewardContent: (row.reward_content as string) ?? "",
     amount: Number(row.amount ?? 0),
     createdAt: (row.created_at as string) ?? "",
+  };
+}
+
+export function mapKaraokeRoom(
+  row: Record<string, unknown>,
+  memberIds: string[] = []
+): KaraokeRoom {
+  return {
+    id: row.id as string,
+    name: (row.name as string) ?? "",
+    createdBy: (row.created_by as string) ?? "",
+    createdAt: (row.created_at as string) ?? "",
+    memberIds,
+    currentVideoId: (row.current_video_id as string) ?? undefined,
+    currentTitle: (row.current_title as string) ?? undefined,
+    currentThumb: (row.current_thumb as string) ?? undefined,
+    currentPosition: Number(row.current_position ?? 0),
+    isPlaying: (row.is_playing as boolean) ?? false,
+  };
+}
+
+export function mapKaraokeSong(row: Record<string, unknown>): KaraokeSong {
+  return {
+    id: row.id as string,
+    roomId: row.room_id as string,
+    videoId: (row.video_id as string) ?? "",
+    title: (row.title as string) ?? "",
+    thumbnail: (row.thumbnail as string) ?? undefined,
+    addedBy: (row.added_by as string) ?? "",
+    addedByName: (row.added_by_name as string) ?? "",
+    status: ((row.status as KaraokeSong["status"]) ?? "queued") as KaraokeSong["status"],
+    createdAt: (row.created_at as string) ?? "",
+  };
+}
+
+export function mapKaraokeMessage(row: Record<string, unknown>): KaraokeMessage {
+  return {
+    id: row.id as string,
+    roomId: row.room_id as string,
+    senderId: row.sender_id as string,
+    senderName: (row.sender_name as string) ?? "",
+    content: (row.content as string) ?? "",
+    sentAt: row.sent_at as string,
   };
 }

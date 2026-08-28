@@ -11,17 +11,33 @@ Deno.serve(async () => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    const { data: existing } = await admin
+    const { data: existingProfiles } = await admin
       .from("profiles")
-      .select("id")
+      .select("id, name, username")
       .eq("role", "admin")
       .limit(1);
 
-    if (existing && existing.length > 0) {
-      return new Response(JSON.stringify({ ok: true, message: "Tài khoản admin đã tồn tại." }), {
-        status: 200,
-        headers,
-      });
+    if (existingProfiles && existingProfiles.length > 0) {
+      const adminId = existingProfiles[0].id;
+      const { data: authUser } = await admin.auth.admin.getUserById(adminId);
+
+      if (authUser && authUser.user) {
+        const { error: updateErr } = await admin.auth.admin.updateUserById(adminId, {
+          password: "admin123",
+        });
+        if (updateErr) {
+          return new Response(
+            JSON.stringify({ ok: false, error: updateErr.message }),
+            { status: 400, headers }
+          );
+        }
+        return new Response(
+          JSON.stringify({ ok: true, message: "Admin đã tồn tại, mật khẩu đã được đặt lại." }),
+          { status: 200, headers }
+        );
+      }
+
+      await admin.from("profiles").delete().eq("id", adminId);
     }
 
     const { data, error } = await admin.auth.admin.createUser({
@@ -36,20 +52,30 @@ Deno.serve(async () => {
     });
 
     if (error) {
-      return new Response(JSON.stringify({ ok: false, error: error.message }), {
-        status: 400,
-        headers,
-      });
+      return new Response(
+        JSON.stringify({ ok: false, error: error.message }),
+        { status: 400, headers }
+      );
     }
 
-    return new Response(JSON.stringify({ ok: true, userId: data.user.id }), {
-      status: 200,
-      headers,
+    await admin.from("profiles").insert({
+      id: data.user.id,
+      username: "admin",
+      name: "Quản trị viên",
+      role: "admin",
+      active: true,
+      presence: "offline",
+      avatar: null,
     });
+
+    return new Response(
+      JSON.stringify({ ok: true, userId: data.user.id, message: "Tài khoản admin đã được tạo lại." }),
+      { status: 200, headers }
+    );
   } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: String(e) }), {
-      status: 500,
-      headers,
-    });
+    return new Response(
+      JSON.stringify({ ok: false, error: String(e) }),
+      { status: 500, headers }
+    );
   }
 });

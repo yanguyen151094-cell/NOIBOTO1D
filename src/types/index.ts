@@ -125,6 +125,42 @@ export interface TeamMessage {
   sentAt: string;
 }
 
+export interface KaraokeRoom {
+  id: string;
+  name: string;
+  createdBy: string;
+  createdAt: string;
+  memberIds: string[];
+  currentVideoId?: string;
+  currentTitle?: string;
+  currentThumb?: string;
+  currentPosition: number;
+  isPlaying: boolean;
+}
+
+export type KaraokeSongStatus = "queued" | "playing" | "played";
+
+export interface KaraokeSong {
+  id: string;
+  roomId: string;
+  videoId: string;
+  title: string;
+  thumbnail?: string;
+  addedBy: string;
+  addedByName: string;
+  status: KaraokeSongStatus;
+  createdAt: string;
+}
+
+export interface KaraokeMessage {
+  id: string;
+  roomId: string;
+  senderId: string;
+  senderName: string;
+  content: string;
+  sentAt: string;
+}
+
 export type VaultPlatform = "facebook" | "tiktok" | "telegram";
 
 export interface CustomerNote {
@@ -152,6 +188,8 @@ export interface AccountVault {
   createdAt: string;
   createdByName?: string;
   isDead: boolean;
+  providedByLeader: boolean;
+  channelStatus: string;
 }
 
 export interface StaffEvaluation {

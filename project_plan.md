@@ -23,6 +23,7 @@
 - `/wall` — Tường cá nhân (đăng bài, bình luận, thả tim)
 - `/announcements` — Thông báo nội bộ (chỉ admin đăng, tổ viên đọc + thả tim)
 - `/plans` — Kế hoạch (admin giao việc, tổ viên đọc thực hiện)
+- `/karaoke` — Phòng hát karaoke (cùng xem 1 bài karaoke YouTube đồng bộ + nhắn tin trong lúc hát)
 
 ## 3. Tính năng cốt lõi
 - [x] Đăng nhập / đăng xuất / ghi nhớ đăng nhập / đổi mật khẩu (Supabase Auth thật)
@@ -36,6 +37,7 @@
 - [x] Quản lý nhân viên (tạo/khóa/reset mật khẩu/thu hồi phiên/phân quyền kênh/chuyển dữ liệu)
 - [x] Kết nối kênh (thêm/gỡ/thay page; Facebook OAuth + webhook; TikTok chờ duyệt)
 - [x] Phòng trò chuyện nội bộ (team chat) — tạo phòng, thêm thành viên, gửi icon, realtime
+- [x] Phòng hát karaoke — tạo phòng hát, dán link YouTube karaoke vào hàng chờ, phát đồng bộ (play/pause/seek) cho mọi người, nhắn tin trong lúc hát
 - [x] Báo cáo (tổng quan, xếp hạng nhân viên, xuất CSV)
 - [x] Nhật ký hoạt động (chỉ admin xem)
 - [x] Ghi chú khách hàng (khách đăng ký, tên tài khoản, liên hệ, tổng nạp, tổng cược) — tổ viên thêm/sửa, admin quản lý tất cả

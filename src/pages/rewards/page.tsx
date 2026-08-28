@@ -316,84 +316,147 @@ export default function Rewards() {
             </p>
           </div>
         ) : (
-          <div className="bg-background-50 rounded-lg border border-background-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-background-100 text-foreground-700">
-                    <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">STT</th>
-                    <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">Ngày</th>
-                    <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">Tên công việc</th>
-                    {adminCols && (
-                      <>
-                        <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">STK</th>
-                        <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">Ngân hàng</th>
-                        <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">Họ tên</th>
-                      </>
-                    )}
-                    <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">Nội dung thưởng</th>
-                    <th className="px-3 py-2.5 text-right font-semibold whitespace-nowrap">Số tiền thưởng</th>
-                    {adminCols && <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap w-20">Thao tác</th>}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-background-200">
-                  {filtered.map((r, idx) => (
-                    <tr key={r.id} className="hover:bg-background-100/50 transition-colors">
-                      <td className="px-3 py-3 text-foreground-600">{idx + 1}</td>
-                      <td className="px-3 py-3 whitespace-nowrap">
-                        {new Date(r.date).toLocaleDateString("vi-VN")}
-                      </td>
-                      <td className="px-3 py-3 font-medium text-foreground-900">{r.workName}</td>
+          <>
+            {/* Desktop table */}
+            <div className="hidden md:block bg-background-50 rounded-lg border border-background-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-background-100 text-foreground-700">
+                      <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">STT</th>
+                      <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">Ngày</th>
+                      <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">Tên công việc</th>
                       {adminCols && (
                         <>
-                          <td className="px-3 py-3 text-foreground-700 font-mono">{r.accountNumber}</td>
-                          <td className="px-3 py-3 text-foreground-700">{r.bankName}</td>
-                          <td className="px-3 py-3 text-foreground-700">{r.recipientName}</td>
+                          <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">STK</th>
+                          <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">Ngân hàng</th>
+                          <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">Họ tên</th>
                         </>
                       )}
-                      <td className="px-3 py-3 text-foreground-700">{r.rewardContent}</td>
-                      <td className="px-3 py-3 text-right font-semibold text-primary-700 whitespace-nowrap">
-                        {formatMoney(r.amount)}
-                      </td>
-                      {adminCols && (
-                        <td className="px-3 py-3 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => openEdit(r)}
-                              className="w-7 h-7 rounded-md flex items-center justify-center text-foreground-400 hover:bg-primary-500/10 hover:text-primary-600 cursor-pointer"
-                              title="Sửa"
-                            >
-                              <i className="ri-pencil-line" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setDeleteTarget(r)}
-                              className="w-7 h-7 rounded-md flex items-center justify-center text-foreground-400 hover:bg-red-500/10 hover:text-red-500 cursor-pointer"
-                              title="Xóa"
-                            >
-                              <i className="ri-delete-bin-line" />
-                            </button>
-                          </div>
-                        </td>
-                      )}
+                      <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">Nội dung thưởng</th>
+                      <th className="px-3 py-2.5 text-right font-semibold whitespace-nowrap">Số tiền thưởng</th>
+                      {adminCols && <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap w-20">Thao tác</th>}
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="bg-background-100 border-t border-background-200">
-                    <td colSpan={adminCols ? 7 : 4} className="px-3 py-3 text-right font-semibold text-foreground-800">
-                      Tổng cộng:
-                    </td>
-                    <td className="px-3 py-3 text-right font-bold text-primary-700 whitespace-nowrap">
-                      {formatMoney(totalAmount)}
-                    </td>
-                    {adminCols && <td className="px-3 py-3" />}
-                  </tr>
-                </tfoot>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-background-200">
+                    {filtered.map((r, idx) => (
+                      <tr key={r.id} className="hover:bg-background-100/50 transition-colors">
+                        <td className="px-3 py-3 text-foreground-600">{idx + 1}</td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          {new Date(r.date).toLocaleDateString("vi-VN")}
+                        </td>
+                        <td className="px-3 py-3 font-medium text-foreground-900">{r.workName}</td>
+                        {adminCols && (
+                          <>
+                            <td className="px-3 py-3 text-foreground-700 font-mono">{r.accountNumber}</td>
+                            <td className="px-3 py-3 text-foreground-700">{r.bankName}</td>
+                            <td className="px-3 py-3 text-foreground-700">{r.recipientName}</td>
+                          </>
+                        )}
+                        <td className="px-3 py-3 text-foreground-700">{r.rewardContent}</td>
+                        <td className="px-3 py-3 text-right font-semibold text-primary-700 whitespace-nowrap">
+                          {formatMoney(r.amount)}
+                        </td>
+                        {adminCols && (
+                          <td className="px-3 py-3 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => openEdit(r)}
+                                className="w-7 h-7 rounded-md flex items-center justify-center text-foreground-400 hover:bg-primary-500/10 hover:text-primary-600 cursor-pointer"
+                                title="Sửa"
+                              >
+                                <i className="ri-pencil-line" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeleteTarget(r)}
+                                className="w-7 h-7 rounded-md flex items-center justify-center text-foreground-400 hover:bg-red-500/10 hover:text-red-500 cursor-pointer"
+                                title="Xóa"
+                              >
+                                <i className="ri-delete-bin-line" />
+                              </button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-background-100 border-t border-background-200">
+                      <td colSpan={adminCols ? 7 : 4} className="px-3 py-3 text-right font-semibold text-foreground-800">
+                        Tổng cộng:
+                      </td>
+                      <td className="px-3 py-3 text-right font-bold text-primary-700 whitespace-nowrap">
+                        {formatMoney(totalAmount)}
+                      </td>
+                      {adminCols && <td className="px-3 py-3" />}
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </div>
-          </div>
+
+            {/* Mobile cards */}
+            <div className="md:hidden space-y-3">
+              {filtered.map((r, idx) => (
+                <div key={r.id} className="bg-background-50 rounded-lg border border-background-200 p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground-900">{r.workName}</p>
+                      <p className="text-xs text-foreground-400 mt-0.5">
+                        {new Date(r.date).toLocaleDateString("vi-VN")} · #{idx + 1}
+                      </p>
+                    </div>
+                    <p className="text-sm font-bold text-primary-700 whitespace-nowrap">{formatMoney(r.amount)}</p>
+                  </div>
+                  {adminCols && (
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <p className="text-foreground-400">STK</p>
+                        <p className="text-foreground-700 font-mono mt-0.5">{r.accountNumber || "—"}</p>
+                      </div>
+                      <div>
+                        <p className="text-foreground-400">Ngân hàng</p>
+                        <p className="text-foreground-700 mt-0.5">{r.bankName || "—"}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <p className="text-foreground-400">Họ tên</p>
+                        <p className="text-foreground-700 mt-0.5">{r.recipientName || "—"}</p>
+                      </div>
+                    </div>
+                  )}
+                  {r.rewardContent && (
+                    <p className="mt-2 text-xs text-foreground-600">{r.rewardContent}</p>
+                  )}
+                  {adminCols && (
+                    <div className="mt-3 pt-2 border-t border-background-100 flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        onClick={() => openEdit(r)}
+                        className="w-8 h-8 rounded-md flex items-center justify-center text-foreground-400 hover:bg-primary-500/10 hover:text-primary-600 cursor-pointer"
+                        title="Sửa"
+                      >
+                        <i className="ri-pencil-line" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget(r)}
+                        className="w-8 h-8 rounded-md flex items-center justify-center text-foreground-400 hover:bg-red-500/10 hover:text-red-500 cursor-pointer"
+                        title="Xóa"
+                      >
+                        <i className="ri-delete-bin-line" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+              <div className="bg-background-100 rounded-lg border border-background-200 p-3 flex items-center justify-between">
+                <p className="text-sm font-semibold text-foreground-800">Tổng cộng</p>
+                <p className="text-sm font-bold text-primary-700">{formatMoney(totalAmount)}</p>
+              </div>
+            </div>
+          </>
         )}
       </div>
 
