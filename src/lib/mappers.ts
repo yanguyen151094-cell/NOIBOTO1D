@@ -186,6 +186,7 @@ export function mapAccountVault(row: Record<string, unknown>): AccountVault {
     email: (row.email as string) ?? "",
     twoFa: (row.two_fa as string) ?? "",
     note: (row.note as string) ?? "",
+    value: Number(row.value ?? 0),
     createdAt: (row.created_at as string) ?? "",
     createdByName: (row.created_by_name as string) ?? undefined,
     isDead: (row.is_dead as boolean) ?? false,

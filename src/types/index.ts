@@ -185,6 +185,7 @@ export interface AccountVault {
   email: string;
   twoFa: string;
   note: string;
+  value: number;
   createdAt: string;
   createdByName?: string;
   isDead: boolean;

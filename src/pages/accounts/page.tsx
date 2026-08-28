@@ -14,6 +14,11 @@ import { platformMeta, formatDateTime } from "@/utils/ui";
 import type { AccountVault, VaultPlatform } from "@/types";
 
 const PLATFORMS: VaultPlatform[] = ["facebook", "tiktok", "telegram"];
+const HIGH_VALUE_THRESHOLD = 600000;
+
+function formatVnd(n: number): string {
+  return n.toLocaleString("vi-VN");
+}
 
 export default function Accounts() {
   const { currentUser } = useAuth();
@@ -60,6 +65,9 @@ export default function Accounts() {
 
   const deadCount = (items ?? []).filter((a) => a.isDead).length;
   const aliveCount = (items ?? []).length - deadCount;
+
+  const highValueItems = filtered.filter((a) => a.value >= HIGH_VALUE_THRESHOLD);
+  const normalItems = filtered.filter((a) => a.value < HIGH_VALUE_THRESHOLD);
 
   return (
     <div className="h-full overflow-y-auto cs-scroll p-4 md:p-6 animate-fade-in">
@@ -149,16 +157,64 @@ export default function Accounts() {
       ) : filtered.length === 0 ? (
         <EmptyState />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map((a) => (
-            <VaultCard
-              key={a.id}
-              item={a}
-              isAdmin={isAdmin}
-              onEdit={() => setEditing(a)}
-              onDelete={() => setDeleteTarget(a)}
-            />
-          ))}
+        <div className="space-y-7">
+          {highValueItems.length > 0 && (
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
+                  <i className="ri-vip-diamond-fill text-amber-600" />
+                </div>
+                <div>
+                  <h3 className="font-heading font-semibold text-foreground-900">
+                    Kênh giá trị cao
+                  </h3>
+                  <p className="text-xs text-foreground-400">
+                    {highValueItems.length} kênh · từ {formatVnd(HIGH_VALUE_THRESHOLD)}đ trở lên
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                {highValueItems.map((a) => (
+                  <VaultCard
+                    key={a.id}
+                    item={a}
+                    isAdmin={isAdmin}
+                    onEdit={() => setEditing(a)}
+                    onDelete={() => setDeleteTarget(a)}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {normalItems.length > 0 && (
+            <section>
+              {highValueItems.length > 0 && (
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-8 h-8 rounded-lg bg-background-100 flex items-center justify-center">
+                    <i className="ri-key-2-line text-foreground-500" />
+                  </div>
+                  <div>
+                    <h3 className="font-heading font-semibold text-foreground-900">
+                      Tài khoản khác
+                    </h3>
+                    <p className="text-xs text-foreground-400">{normalItems.length} tài khoản</p>
+                  </div>
+                </div>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                {normalItems.map((a) => (
+                  <VaultCard
+                    key={a.id}
+                    item={a}
+                    isAdmin={isAdmin}
+                    onEdit={() => setEditing(a)}
+                    onDelete={() => setDeleteTarget(a)}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
         </div>
       )}
 
@@ -331,6 +387,12 @@ function VaultCard({
                   Die
                 </span>
               )}
+              {item.value >= HIGH_VALUE_THRESHOLD && (
+                <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-semibold shrink-0">
+                  <i className="ri-vip-diamond-fill mr-0.5" />
+                  Giá trị cao
+                </span>
+              )}
               {item.providedByLeader && (
                 <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-semibold shrink-0">
                   Tổ trưởng cấp
@@ -395,6 +457,17 @@ function VaultCard({
             {item.email || <span className="text-foreground-300">—</span>}
           </p>
         </div>
+        <div>
+          <p className="text-[11px] text-foreground-400 flex items-center gap-1">
+            <i className="ri-money-dollar-circle-line" />
+            Giá trị kênh
+          </p>
+          <p className={`text-sm font-semibold ${
+            item.value >= HIGH_VALUE_THRESHOLD ? "text-amber-600" : "text-foreground-800"
+          }`}>
+            {item.value > 0 ? `${formatVnd(item.value)}đ` : <span className="text-foreground-300 font-normal">—</span>}
+          </p>
+        </div>
         <SecretField label="Mã 2FA" value={item.twoFa} icon="ri-shield-keyhole-line" />
         {item.note && (
           <p className="text-xs text-foreground-500 leading-snug bg-background-100 rounded-md px-2.5 py-2">
@@ -430,6 +503,7 @@ function VaultModal({
   const [email, setEmail] = useState(initial?.email ?? "");
   const [twoFa, setTwoFa] = useState(initial?.twoFa ?? "");
   const [note, setNote] = useState(initial?.note ?? "");
+  const [value, setValue] = useState(initial?.value ? String(initial.value) : "");
   const [isDead, setIsDead] = useState(initial?.isDead ?? false);
   const [providedByLeader, setProvidedByLeader] = useState(initial?.providedByLeader ?? false);
   const [channelStatus, setChannelStatus] = useState(initial?.channelStatus ?? "normal");
@@ -443,6 +517,7 @@ function VaultModal({
       email: email.trim(),
       twoFa,
       note: note.trim(),
+      value: Number(value.replace(/[^0-9]/g, "")) || 0,
       isDead,
       providedByLeader,
       channelStatus,
@@ -500,6 +575,25 @@ function VaultModal({
         <Field label="Mật khẩu" value={password} onChange={setPassword} placeholder="Mật khẩu" />
         <Field label="Gmail" value={email} onChange={setEmail} placeholder="example@gmail.com" />
         <Field label="Mã xác thực 2FA" value={twoFa} onChange={setTwoFa} placeholder="Mã 2FA / secret key" />
+        <div>
+          <label className="block text-sm text-foreground-700 mb-1.5">
+            Giá trị kênh (VNĐ)
+          </label>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={value}
+            onChange={(e) => {
+              const digits = e.target.value.replace(/[^0-9]/g, "");
+              setValue(digits ? Number(digits).toLocaleString("vi-VN") : "");
+            }}
+            placeholder="VD: 600.000"
+            className="w-full px-3 py-2.5 rounded-md border border-background-300 bg-background-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
+          />
+          <p className="text-xs text-foreground-400 mt-1.5">
+            Kênh có giá trị từ <span className="font-semibold text-amber-600">600.000đ</span> trở lên sẽ được xếp vào mục <span className="font-semibold">"Kênh giá trị cao"</span> riêng.
+          </p>
+        </div>
         <div className="flex items-center justify-between gap-3 py-2">
           <div>
             <p className="text-sm font-medium text-foreground-800">Tài khoản đã bị khóa (Die)</p>

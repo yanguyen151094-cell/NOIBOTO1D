@@ -229,6 +229,7 @@ export interface AccountVaultInput {
   email: string;
   twoFa: string;
   note: string;
+  value: number;
   isDead: boolean;
   providedByLeader: boolean;
   channelStatus: string;
@@ -244,6 +245,7 @@ export async function createAccountVault(input: AccountVaultInput): Promise<void
     email: input.email,
     two_fa: input.twoFa,
     note: input.note,
+    value: input.value,
     is_dead: input.isDead,
     provided_by_leader: input.providedByLeader,
     channel_status: input.channelStatus,
@@ -263,6 +265,7 @@ export async function updateAccountVault(id: string, input: AccountVaultInput): 
       email: input.email,
       two_fa: input.twoFa,
       note: input.note,
+      value: input.value,
       is_dead: input.isDead,
       provided_by_leader: input.providedByLeader,
       channel_status: input.channelStatus,
