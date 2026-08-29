@@ -51,25 +51,15 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
   const peersRef = useRef<Record<string, RTCPeerConnection>>({});
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const participantsRef = useRef<Set<string>>(new Set());
-
-  // Refs để callback không phụ thuộc state thay đổi
+  const pendingIceRef = useRef<Record<string, IceCandidateInit[]>>({});
   const userIdRef = useRef(userId);
   const userNameRef = useRef(userName);
   const isActiveRef = useRef(isActive);
-  const isMutedRef = useRef(isMuted);
+  const isSubscribedRef = useRef(false);
 
   useEffect(() => { userIdRef.current = userId; }, [userId]);
   useEffect(() => { userNameRef.current = userName; }, [userName]);
   useEffect(() => { isActiveRef.current = isActive; }, [isActive]);
-  useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
-
-  const broadcast = useCallback((payload: Record<string, unknown>) => {
-    try {
-      channelRef.current?.send({ type: "broadcast", event: "karaoke-voice", payload });
-    } catch {
-      // Broadcast failures are best-effort; rely on reconnection to re-broadcast
-    }
-  }, []);
 
   const removePeer = useCallback((peerId: string) => {
     const pc = peersRef.current[peerId];
@@ -79,11 +69,10 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
         pc.onicecandidate = null;
         pc.onconnectionstatechange = null;
         pc.close();
-      } catch {
-        // ignore
-      }
+      } catch { /* ignore */ }
       delete peersRef.current[peerId];
     }
+    delete pendingIceRef.current[peerId];
     setPeers((prev) => {
       const next = { ...prev };
       delete next[peerId];
@@ -93,136 +82,136 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
     setParticipants(Array.from(participantsRef.current));
   }, []);
 
-  const addPeer = useCallback(
-    (peerId: string, name: string) => {
-      if (peersRef.current[peerId]) {
-        // Peer already exists, just update name if needed
-        setPeers((prev) => {
-          if (prev[peerId] && prev[peerId].userName !== name) {
-            return { ...prev, [peerId]: { ...prev[peerId], userName: name } };
-          }
-          return prev;
-        });
-        return;
-      }
-      const pc = new RTCPeerConnection(ICE_SERVERS);
-      peersRef.current[peerId] = pc;
+  const safeBroadcast = useCallback((payload: Record<string, unknown>) => {
+    if (!isSubscribedRef.current || !channelRef.current) return;
+    try {
+      channelRef.current.send({ type: "broadcast", event: "karaoke-voice", payload });
+    } catch { /* ignore */ }
+  }, []);
 
-      // Thêm track local stream nếu có
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach((track) => {
-          try {
-            pc.addTrack(track, localStreamRef.current!);
-          } catch {
-            // Track already added or other issue
-          }
-        });
-      }
-
-      pc.onicecandidate = (e) => {
-        if (e.candidate) {
-          broadcast({
-            kind: "ice",
-            from: userIdRef.current,
-            to: peerId,
-            candidate: e.candidate.toJSON(),
-          });
+  const ensurePeer = useCallback((peerId: string, name: string): RTCPeerConnection => {
+    let pc = peersRef.current[peerId];
+    if (pc) {
+      setPeers((prev) => {
+        if (prev[peerId] && prev[peerId].userName !== name) {
+          return { ...prev, [peerId]: { ...prev[peerId], userName: name } };
         }
-      };
+        return prev;
+      });
+      return pc;
+    }
 
-      pc.ontrack = (e) => {
-        const [remoteStream] = e.streams;
-        setPeers((prev) => ({ ...prev, [peerId]: { stream: remoteStream, userName: name } }));
-      };
+    pc = new RTCPeerConnection(ICE_SERVERS);
+    peersRef.current[peerId] = pc;
 
-      pc.onconnectionstatechange = () => {
-        const state = pc.connectionState;
-        if (state === "failed" || state === "closed" || state === "disconnected") {
-          // Đợi 3 giây trước khi remove để cho phép reconnect
-          setTimeout(() => {
-            if (peersRef.current[peerId]?.connectionState === "failed" ||
-                peersRef.current[peerId]?.connectionState === "closed" ||
-                peersRef.current[peerId]?.connectionState === "disconnected") {
-              removePeer(peerId);
-            }
-          }, 3000);
-        }
-      };
-    },
-    [broadcast, removePeer]
-  );
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => {
+        try {
+          pc.addTrack(track, localStreamRef.current!);
+        } catch { /* ignore */ }
+      });
+    }
 
-  const createOffer = useCallback(
-    async (peerId: string) => {
-      const pc = peersRef.current[peerId];
-      if (!pc) return;
-      try {
-        // Đảm bảo có track trước khi tạo offer
-        if (localStreamRef.current) {
-          const senders = pc.getSenders();
-          localStreamRef.current.getTracks().forEach((track) => {
-            if (!senders.find((s) => s.track === track)) {
-              try {
-                pc.addTrack(track, localStreamRef.current!);
-              } catch {
-                // ignore
-              }
-            }
-          });
-        }
-        const offer = await pc.createOffer({ offerToReceiveAudio: true });
-        await pc.setLocalDescription(offer);
-        broadcast({
-          kind: "offer",
+    pc.onicecandidate = (e) => {
+      if (e.candidate) {
+        safeBroadcast({
+          kind: "ice",
           from: userIdRef.current,
           to: peerId,
-          offer: { type: offer.type, sdp: offer.sdp },
+          candidate: e.candidate.toJSON(),
         });
-      } catch (e) {
-        console.error("createOffer error", e);
       }
-    },
-    [broadcast]
-  );
+    };
 
-  const handleOffer = useCallback(
-    async (from: string, offer: SessionDescriptionInit, name: string) => {
-      addPeer(from, name);
-      const pc = peersRef.current[from];
-      if (!pc) return;
-      try {
-        await pc.setRemoteDescription(new RTCSessionDescription(offer as any));
-        // Đảm bảo track local đã thêm
-        if (localStreamRef.current) {
-          const senders = pc.getSenders();
-          localStreamRef.current.getTracks().forEach((track) => {
-            if (!senders.find((s) => s.track === track)) {
-              try {
-                pc.addTrack(track, localStreamRef.current!);
-              } catch {
-                // ignore
-              }
-            }
-          });
-        }
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        broadcast({
-          kind: "answer",
-          from: userIdRef.current,
-          to: from,
-          answer: { type: answer.type, sdp: answer.sdp },
-        });
-      } catch (e) {
-        console.error("handleOffer error", e);
+    pc.ontrack = (e) => {
+      const [remoteStream] = e.streams;
+      setPeers((prev) => ({
+        ...prev,
+        [peerId]: { stream: remoteStream, userName: name },
+      }));
+    };
+
+    pc.onconnectionstatechange = () => {
+      const state = pc.connectionState;
+      if (state === "failed" || state === "closed" || state === "disconnected") {
+        setTimeout(() => {
+          if (peersRef.current[peerId]?.connectionState === state) {
+            removePeer(peerId);
+          }
+        }, 3000);
       }
-    },
-    [addPeer, broadcast]
-  );
+    };
+
+    participantsRef.current.add(peerId);
+    setParticipants(Array.from(participantsRef.current));
+    return pc;
+  }, [removePeer, safeBroadcast]);
+
+  const createOffer = useCallback(async (peerId: string) => {
+    const pc = peersRef.current[peerId];
+    if (!pc) return;
+    // Chỉ tạo offer khi signaling state là stable (tránh duplicate)
+    if (pc.signalingState !== "stable") return;
+    try {
+      const offer = await pc.createOffer({ offerToReceiveAudio: true });
+      await pc.setLocalDescription(offer);
+      safeBroadcast({
+        kind: "offer",
+        from: userIdRef.current,
+        to: peerId,
+        offer: { type: offer.type, sdp: offer.sdp },
+      });
+    } catch (e) {
+      console.error("createOffer error", e);
+    }
+  }, [safeBroadcast]);
+
+  const handleOffer = useCallback(async (from: string, offer: SessionDescriptionInit, name: string) => {
+    const pc = ensurePeer(from, name);
+    // Chỉ xử lý offer khi peer đang ở stable state
+    if (pc.signalingState !== "stable") return;
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(offer as any));
+
+      // Flush ICE candidates đã queue trước đó
+      const queue = pendingIceRef.current[from] ?? [];
+      for (const c of queue) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(c as any));
+        } catch { /* ignore */ }
+      }
+      delete pendingIceRef.current[from];
+
+      // Đảm bảo local tracks đã thêm
+      if (localStreamRef.current) {
+        const senders = pc.getSenders();
+        localStreamRef.current.getTracks().forEach((track) => {
+          if (!senders.find((s) => s.track === track)) {
+            try {
+              pc.addTrack(track, localStreamRef.current!);
+            } catch { /* ignore */ }
+          }
+        });
+      }
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      safeBroadcast({
+        kind: "answer",
+        from: userIdRef.current,
+        to: from,
+        answer: { type: answer.type, sdp: answer.sdp },
+      });
+    } catch (e) {
+      console.error("handleOffer error", e);
+    }
+  }, [ensurePeer, safeBroadcast]);
 
   const handleAnswer = useCallback(async (from: string, answer: SessionDescriptionInit) => {
     const pc = peersRef.current[from];
     if (!pc) return;
+    // Chỉ xử lý answer nếu chúng ta đã gửi offer (have-local-offer)
+    if (pc.signalingState !== "have-local-offer") return;
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(answer as any));
     } catch (e) {
@@ -232,12 +221,15 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
 
   const handleIce = useCallback(async (from: string, candidate: IceCandidateInit) => {
     const pc = peersRef.current[from];
-    if (!pc) return;
+    if (!pc || !pc.remoteDescription) {
+      // Queue ICE để xử lý sau khi có remoteDescription
+      if (!pendingIceRef.current[from]) pendingIceRef.current[from] = [];
+      pendingIceRef.current[from].push(candidate);
+      return;
+    }
     try {
       await pc.addIceCandidate(new RTCIceCandidate(candidate as any));
-    } catch {
-      // ignore stale ICE
-    }
+    } catch { /* ignore */ }
   }, []);
 
   const join = useCallback(async () => {
@@ -260,23 +252,27 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
       localStreamRef.current = stream;
       setLocalStream(stream);
       setIsActive(true);
-      // Delay nhỏ để đảm bảo channel đã subscribe
+
+      // Delay để đảm bảo channel đã subscribed
       setTimeout(() => {
-        broadcast({ kind: "join", userId: userIdRef.current, userName: userNameRef.current });
-      }, 300);
+        if (!isActiveRef.current) return;
+        safeBroadcast({ kind: "join", userId: userIdRef.current, userName: userNameRef.current });
+        safeBroadcast({ kind: "who_is_here", userId: userIdRef.current });
+      }, 500);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Không thể truy cập microphone";
       setError(msg);
       setIsActive(false);
     }
-  }, [broadcast]);
+  }, [safeBroadcast]);
 
   const leave = useCallback(() => {
-    broadcast({ kind: "leave", userId: userIdRef.current });
+    safeBroadcast({ kind: "leave", userId: userIdRef.current });
     Object.values(peersRef.current).forEach((pc) => {
       try { pc.close(); } catch { /* ignore */ }
     });
     peersRef.current = {};
+    pendingIceRef.current = {};
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     localStreamRef.current = null;
     setLocalStream(null);
@@ -285,7 +281,7 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
     participantsRef.current = new Set();
     setIsActive(false);
     setIsMuted(false);
-  }, [broadcast]);
+  }, [safeBroadcast]);
 
   const toggleMute = useCallback(() => {
     setIsMuted((prev) => {
@@ -297,9 +293,10 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
     });
   }, []);
 
-  // Setup broadcast channel — chỉ phụ thuộc roomId (userId dùng ref)
+  // Setup broadcast channel
   useEffect(() => {
     if (!roomId) return;
+    isSubscribedRef.current = false;
     const ch = supabase.channel(`karaoke-voice-${roomId}`, {
       config: { broadcast: { self: false } },
     });
@@ -312,23 +309,29 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
 
       // Bỏ qua tin nhắn không dành cho mình
       if (to && to !== userIdRef.current) return;
-      // Bỏ qua tin nhắn của chính mình (self: false đã chặn, nhưng check thêm cho chắc)
+      // Bỏ qua tin nhắn của chính mình
       if (from && from === userIdRef.current) return;
       if (!kind) return;
 
       if (kind === "join") {
         const peerId = p.userId as string;
-        if (!peerId || peerId === userIdRef.current) return;
+        if (!peerId) return;
         const name = (p.userName as string) || "Thành viên";
-        participantsRef.current.add(peerId);
-        setParticipants(Array.from(participantsRef.current));
-        // LUÔN tạo offer khi có người mới vào — KHÔNG dùng điều kiện userId < peerId
-        addPeer(peerId, name);
-        createOffer(peerId).catch(() => {});
+        ensurePeer(peerId, name);
+        // User có ID nhỏ hơn tạo offer (tránh glare — cả 2 cùng tạo offer)
+        if (userIdRef.current < peerId) {
+          createOffer(peerId).catch(() => {});
+        }
+        // Phản hồi presence để peer mới biết mình tồn tại
+        safeBroadcast({
+          kind: "i_am_here",
+          userId: userIdRef.current,
+          userName: userNameRef.current,
+          to: peerId,
+        });
       } else if (kind === "leave") {
         const peerId = p.userId as string;
-        if (!peerId || peerId === userIdRef.current) return;
-        removePeer(peerId);
+        if (peerId) removePeer(peerId);
       } else if (kind === "offer" && from) {
         const name = (p.userName as string) || "Thành viên";
         handleOffer(from, p.offer as SessionDescriptionInit, name).catch(() => {});
@@ -336,24 +339,60 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
         handleAnswer(from, p.answer as SessionDescriptionInit).catch(() => {});
       } else if (kind === "ice" && from) {
         handleIce(from, p.candidate as IceCandidateInit).catch(() => {});
+      } else if (kind === "who_is_here") {
+        if (isActiveRef.current) {
+          safeBroadcast({
+            kind: "i_am_here",
+            userId: userIdRef.current,
+            userName: userNameRef.current,
+          });
+        }
+      } else if (kind === "i_am_here") {
+        const peerId = p.userId as string;
+        if (!peerId || peerId === userIdRef.current) return;
+        const name = (p.userName as string) || "Thành viên";
+        ensurePeer(peerId, name);
+        // User có ID nhỏ hơn tạo offer
+        if (userIdRef.current < peerId) {
+          createOffer(peerId).catch(() => {});
+        }
       }
     });
 
     ch.subscribe((status) => {
-      if (status === "SUBSCRIBED" && isActiveRef.current) {
-        // Re-broadcast join khi reconnect
-        broadcast({ kind: "join", userId: userIdRef.current, userName: userNameRef.current });
+      if (status === "SUBSCRIBED") {
+        isSubscribedRef.current = true;
+        if (isActiveRef.current) {
+          // Re-broadcast join khi reconnect
+          safeBroadcast({ kind: "join", userId: userIdRef.current, userName: userNameRef.current });
+          safeBroadcast({ kind: "who_is_here", userId: userIdRef.current });
+        }
+      } else if (status === "CLOSED" || status === "CHANNEL_ERROR") {
+        isSubscribedRef.current = false;
       }
     });
 
     channelRef.current = ch;
 
     return () => {
+      isSubscribedRef.current = false;
       supabase.removeChannel(ch);
       channelRef.current = null;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
+
+  // Periodic re-broadcast mỗi 10 giây để duy trì discovery
+  useEffect(() => {
+    if (!isActive || !roomId) return;
+    const interval = setInterval(() => {
+      if (isActiveRef.current && isSubscribedRef.current) {
+        safeBroadcast({ kind: "join", userId: userIdRef.current, userName: userNameRef.current });
+      }
+    }, 10000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive, roomId]);
 
   // Cleanup khi unmount
   useEffect(() => {

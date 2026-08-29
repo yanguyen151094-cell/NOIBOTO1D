@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { KaraokeRoom, User } from "@/types";
 import { mapKaraokeRoom, mapUser } from "@/lib/mappers";
@@ -34,9 +34,10 @@ export function useKaraokeRooms(): KaraokeRoomsData {
   const [members, setMembers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const initialLoadDone = useRef(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     setError("");
     try {
       const [roomRes, memberRes, profRes] = await Promise.all([
@@ -68,24 +69,25 @@ export function useKaraokeRooms(): KaraokeRoomsData {
         setError(e instanceof Error ? e.message : "Không thể tải phòng hát.");
       }
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
+      initialLoadDone.current = true;
     }
   }, []);
 
   useEffect(() => {
-    load();
+    load(true);
   }, [load]);
 
   useEffect(() => {
     const channel = supabase
       .channel("karaoke-rooms-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "karaoke_rooms" }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "karaoke_room_members" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "karaoke_rooms" }, () => load(false))
+      .on("postgres_changes", { event: "*", schema: "public", table: "karaoke_room_members" }, () => load(false))
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
   }, [load]);
 
-  return { rooms, members, loading, error, reload: load };
+  return { rooms, members, loading, error, reload: () => load(true) };
 }

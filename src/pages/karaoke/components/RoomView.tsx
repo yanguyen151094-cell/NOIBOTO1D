@@ -313,8 +313,14 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
   useEffect(() => {
     if (!roomId) return;
     const interval = setInterval(() => {
-      setProgress(playerRef.current?.getCurrentTime() ?? 0);
-      setDuration(playerRef.current?.getDuration() ?? 0);
+      try {
+        const t = playerRef.current?.getCurrentTime() ?? 0;
+        const d = playerRef.current?.getDuration() ?? 0;
+        setProgress(t);
+        setDuration(d);
+      } catch {
+        // Player chưa sẵn sàng, bỏ qua
+      }
     }, 500);
     return () => clearInterval(interval);
   }, [roomId]);

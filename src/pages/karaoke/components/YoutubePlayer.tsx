@@ -110,19 +110,43 @@ const YoutubePlayer = forwardRef<YoutubePlayerHandle, Props>(function YoutubePla
 
   useImperativeHandle(ref, () => ({
     loadVideo: (videoId: string, startAt?: number) => {
-      playerRef.current?.loadVideoById(videoId, startAt ?? 0);
+      const p = playerRef.current;
+      if (p && typeof p.loadVideoById === "function") {
+        p.loadVideoById(videoId, startAt ?? 0);
+      }
     },
     play: () => {
-      playerRef.current?.playVideo();
+      const p = playerRef.current;
+      if (p && typeof p.playVideo === "function") {
+        p.playVideo();
+      }
     },
     pause: () => {
-      playerRef.current?.pauseVideo();
+      const p = playerRef.current;
+      if (p && typeof p.pauseVideo === "function") {
+        p.pauseVideo();
+      }
     },
     seekTo: (seconds: number) => {
-      playerRef.current?.seekTo(seconds, true);
+      const p = playerRef.current;
+      if (p && typeof p.seekTo === "function") {
+        p.seekTo(seconds, true);
+      }
     },
-    getCurrentTime: () => playerRef.current?.getCurrentTime() ?? 0,
-    getDuration: () => playerRef.current?.getDuration() ?? 0,
+    getCurrentTime: () => {
+      const p = playerRef.current;
+      if (p && typeof p.getCurrentTime === "function") {
+        return p.getCurrentTime();
+      }
+      return 0;
+    },
+    getDuration: () => {
+      const p = playerRef.current;
+      if (p && typeof p.getDuration === "function") {
+        return p.getDuration();
+      }
+      return 0;
+    },
   }));
 
   return (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { KaraokeMessage, KaraokeRoom, KaraokeSong } from "@/types";
 import { mapKaraokeMessage, mapKaraokeRoom, mapKaraokeSong } from "@/lib/mappers";
@@ -18,15 +18,16 @@ export function useKaraokeRoom(roomId: string | null): KaraokeRoomData {
   const [messages, setMessages] = useState<KaraokeMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const initialLoadDone = useRef(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (showLoading = true) => {
     if (!roomId) {
       setRoom(null);
       setQueue([]);
       setMessages([]);
       return;
     }
-    setLoading(true);
+    if (showLoading) setLoading(true);
     setError("");
     try {
       const [roomRes, queueRes, msgRes, profRes, memberRes] = await Promise.all([
@@ -60,26 +61,27 @@ export function useKaraokeRoom(roomId: string | null): KaraokeRoomData {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không thể tải phòng hát.");
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
+      initialLoadDone.current = true;
     }
   }, [roomId]);
 
   useEffect(() => {
-    load();
+    load(true);
   }, [load]);
 
   useEffect(() => {
     if (!roomId) return;
     const channel = supabase
       .channel(`karaoke-room-${roomId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "karaoke_rooms", filter: `id=eq.${roomId}` }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "karaoke_queue", filter: `room_id=eq.${roomId}` }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "karaoke_messages", filter: `room_id=eq.${roomId}` }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "karaoke_rooms", filter: `id=eq.${roomId}` }, () => load(false))
+      .on("postgres_changes", { event: "*", schema: "public", table: "karaoke_queue", filter: `room_id=eq.${roomId}` }, () => load(false))
+      .on("postgres_changes", { event: "*", schema: "public", table: "karaoke_messages", filter: `room_id=eq.${roomId}` }, () => load(false))
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
   }, [roomId, load]);
 
-  return { room, queue, messages, loading, error, reload: load };
+  return { room, queue, messages, loading, error, reload: () => load(true) };
 }
