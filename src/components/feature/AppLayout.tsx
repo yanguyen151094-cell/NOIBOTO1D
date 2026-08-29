@@ -10,6 +10,12 @@ const TITLES: Record<string, string> = {
   "/": "Tổng quan",
   "/inbox": "Hộp thư chung",
   "/team": "Phòng trò chuyện",
+  "/karaoke": "Phòng hát karaoke",
+  "/movies": "Rạp chiếu phim",
+  "/wall": "Tường cá nhân",
+  "/announcements": "Thông báo",
+  "/plans": "Kế hoạch",
+  "/rewards": "Nhận thưởng",
   "/customers": "Khách hàng",
   "/staff": "Quản lý nhân viên",
   "/channels": "Kết nối kênh",
@@ -19,6 +25,9 @@ const TITLES: Record<string, string> = {
   "/customer-notes": "Ghi chú khách hàng",
   "/accounts": "Kho tài khoản",
   "/evaluations": "Đánh giá",
+  "/staff-stats": "Số liệu nhân viên",
+  "/team-stats": "Số liệu tổ",
+  "/staff-punishments": "Nhận phạt",
 };
 
 export default function AppLayout() {

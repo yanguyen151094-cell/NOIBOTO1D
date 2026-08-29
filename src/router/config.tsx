@@ -21,6 +21,9 @@ import Rewards from "@/pages/rewards/page";
 import Karaoke from "@/pages/karaoke/page";
 import StaffStats from "@/pages/staff-stats/page";
 import StaffPunishments from "@/pages/staff-punishments/page";
+import Movies from "@/pages/movies/page";
+import TeamStats from "@/pages/team-stats/page";
+import StaffRanking from "@/pages/staff-ranking/page";
 
 const routes: RouteObject[] = [
   {
@@ -34,22 +37,25 @@ const routes: RouteObject[] = [
       { index: true, element: <Dashboard /> },
       { path: "inbox", element: <Inbox /> },
       { path: "team", element: <Team /> },
+      { path: "karaoke", element: <Karaoke /> },
+      { path: "movies", element: <Movies /> },
+      { path: "wall", element: <Wall /> },
+      { path: "announcements", element: <Announcements /> },
+      { path: "plans", element: <Plans /> },
+      { path: "rewards", element: <Rewards /> },
       { path: "customers", element: <Customers /> },
+      { path: "customer-notes", element: <CustomerNotes /> },
+      { path: "accounts", element: <Accounts /> },
+      { path: "evaluations", element: <Evaluations /> },
+      { path: "staff-stats", element: <StaffStats /> },
+      { path: "staff-ranking", element: <StaffRanking /> },
+      { path: "team-stats", element: <TeamStats /> },
+      { path: "staff-punishments", element: <StaffPunishments /> },
       { path: "staff", element: <Staff /> },
       { path: "channels", element: <Channels /> },
       { path: "reports", element: <Reports /> },
       { path: "logs", element: <Logs /> },
       { path: "settings", element: <Settings /> },
-      { path: "customer-notes", element: <CustomerNotes /> },
-      { path: "accounts", element: <Accounts /> },
-      { path: "evaluations", element: <Evaluations /> },
-      { path: "wall", element: <Wall /> },
-      { path: "announcements", element: <Announcements /> },
-      { path: "plans", element: <Plans /> },
-      { path: "rewards", element: <Rewards /> },
-      { path: "karaoke", element: <Karaoke /> },
-      { path: "staff-stats", element: <StaffStats /> },
-      { path: "staff-punishments", element: <StaffPunishments /> },
     ],
   },
   {

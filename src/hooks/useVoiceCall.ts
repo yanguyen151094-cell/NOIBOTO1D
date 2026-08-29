@@ -144,7 +144,16 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
   const join = useCallback(async () => {
     try {
       setError(null);
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          sampleRate: 48000,
+          channelCount: 2,
+          latency: 0.01,
+        },
+      });
       localStreamRef.current = stream;
       setLocalStream(stream);
       setIsActive(true);

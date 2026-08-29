@@ -798,6 +798,133 @@ export async function sendKaraokeMessage(roomId: string, content: string): Promi
   if (error) throw error;
 }
 
+export async function approveSongRequest(
+  requestId: string,
+  roomId: string
+): Promise<void> {
+  const { data: req } = await supabase
+    .from("karaoke_song_requests")
+    .select("video_id,title,thumbnail")
+    .eq("id", requestId)
+    .single();
+  if (!req) throw new Error("Không tìm thấy yêu cầu.");
+  await addKaraokeSong(roomId, req.video_id, req.title, req.thumbnail ?? "");
+  await supabase.from("karaoke_song_requests").update({ status: "approved" }).eq("id", requestId);
+}
+
+export async function rejectSongRequest(requestId: string): Promise<void> {
+  const { error } = await supabase
+    .from("karaoke_song_requests")
+    .update({ status: "rejected" })
+    .eq("id", requestId);
+  if (error) throw error;
+}
+
+export async function deleteSongRequest(requestId: string): Promise<void> {
+  const { error } = await supabase.from("karaoke_song_requests").delete().eq("id", requestId);
+  if (error) throw error;
+}
+
+export async function createSongRequest(
+  roomId: string,
+  videoId: string,
+  title: string,
+  thumbnail: string
+): Promise<void> {
+  const userId = await requireUserId();
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("name")
+    .eq("id", userId)
+    .maybeSingle();
+  const { error } = await supabase.from("karaoke_song_requests").insert({
+    room_id: roomId,
+    video_id: videoId,
+    title,
+    thumbnail,
+    requested_by: userId,
+    requested_by_name: profile?.name ?? "",
+    status: "pending",
+  });
+  if (error) throw error;
+}
+
+// ===== Team Daily Stats =====
+
+export interface TeamDailyStatInput {
+  date: string;
+  newCustomers: number;
+  totalMoneySent: number;
+  totalDeposits: number;
+  totalBets: number;
+  registeredCustomers: number;
+}
+
+export async function upsertTeamDailyStat(input: TeamDailyStatInput): Promise<void> {
+  const userId = await requireUserId();
+  const { error } = await supabase.from("team_daily_stats").upsert(
+    {
+      date: input.date,
+      new_customers: input.newCustomers,
+      total_money_sent: input.totalMoneySent,
+      total_deposits: input.totalDeposits,
+      total_bets: input.totalBets,
+      registered_customers: input.registeredCustomers,
+      created_by: userId,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "date" }
+  );
+  if (error) throw error;
+}
+
+export async function deleteTeamDailyStat(id: string): Promise<void> {
+  const { error } = await supabase.from("team_daily_stats").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// ===== Movies =====
+
+export interface MovieInput {
+  title: string;
+  description?: string;
+  videoUrl: string;
+  thumbnail?: string;
+  category?: string;
+}
+
+export async function createMovie(input: MovieInput): Promise<void> {
+  const userId = await requireUserId();
+  const { error } = await supabase.from("movies").insert({
+    title: input.title,
+    description: input.description ?? null,
+    video_url: input.videoUrl,
+    thumbnail: input.thumbnail ?? null,
+    category: input.category ?? null,
+    created_by: userId,
+  });
+  if (error) throw error;
+}
+
+export async function updateMovie(id: string, input: MovieInput): Promise<void> {
+  const { error } = await supabase
+    .from("movies")
+    .update({
+      title: input.title,
+      description: input.description ?? null,
+      video_url: input.videoUrl,
+      thumbnail: input.thumbnail ?? null,
+      category: input.category ?? null,
+    })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteMovie(id: string): Promise<void> {
+  const { error } = await supabase.from("movies").delete().eq("id", id);
+  if (error) throw error;
+}
+
 // ===== Staff Daily Stats =====
 
 export interface StaffDailyStatInput {

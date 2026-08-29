@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { useOnlineStaff } from "@/hooks/useOnlineStaff";
 import Avatar from "@/components/base/Avatar";
 import { supabase } from "@/lib/supabase";
 import { updatePresence, markNotificationRead, markAllNotificationsRead } from "@/lib/actions";
@@ -18,9 +19,11 @@ const LOGO_URL = "https://static.readdy.ai/image/b107d501ab31adf698875488b112872
 export default function Topbar({ title, onMenuClick }: TopbarProps) {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
+  const { users: onlineUsers } = useOnlineStaff();
   const [menuOpen, setMenuOpen] = useState(false);
   const [presenceOpen, setPresenceOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [onlineOpen, setOnlineOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
   const isAdmin = currentUser?.role === "admin";
@@ -70,6 +73,8 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
     }
   };
 
+  const onlineCount = onlineUsers.filter((u) => u.presence === "online" || u.presence === "busy").length;
+
   return (
     <header className="h-16 flex items-center justify-between gap-3 px-4 md:px-6 bg-background-50 border-b border-background-200">
       <div className="flex items-center gap-3 min-w-0">
@@ -88,6 +93,63 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
       </div>
 
       <div className="flex items-center gap-2 md:gap-3">
+        {/* Online staff */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setOnlineOpen((v) => !v)}
+            className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-background-100 hover:bg-background-200 cursor-pointer"
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-sm text-foreground-700 whitespace-nowrap">
+              {onlineCount} đang online
+            </span>
+            <i className="ri-arrow-down-s-line text-foreground-500" />
+          </button>
+          {onlineOpen && (
+            <div className="absolute right-0 top-full mt-1 w-56 bg-background-50 rounded-lg border border-background-200 shadow-sm py-1 z-30 animate-fade-in max-h-72 overflow-y-auto cs-scroll">
+              <p className="px-3 py-2 text-xs font-semibold text-foreground-500 border-b border-background-100">
+                Nhân viên đang online
+              </p>
+              {onlineUsers.length === 0 ? (
+                <p className="px-3 py-4 text-xs text-foreground-400 text-center">Chưa có ai online</p>
+              ) : (
+                onlineUsers.map((u) => (
+                  <div key={u.id} className="flex items-center gap-2 px-3 py-2 hover:bg-background-100">
+                    <div className="relative">
+                      <Avatar name={u.name} size="sm" />
+                      <span
+                        className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-background-50 ${
+                          u.presence === "online"
+                            ? "bg-emerald-500"
+                            : u.presence === "busy"
+                              ? "bg-red-500"
+                              : u.presence === "away"
+                                ? "bg-amber-500"
+                                : "bg-foreground-300"
+                        }`}
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-foreground-900 truncate">{u.name}</p>
+                      <p className="text-[10px] text-foreground-500">
+                        {u.presence === "online"
+                          ? "Đang làm nhiệm vụ"
+                          : u.presence === "busy"
+                            ? "Đang bận"
+                            : u.presence === "away"
+                              ? "Tạm vắng"
+                              : "Offline"}
+                        {u.lastActive && ` · ${formatRelative(u.lastActive)}`}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+
         <div className="relative">
           <button
             type="button"

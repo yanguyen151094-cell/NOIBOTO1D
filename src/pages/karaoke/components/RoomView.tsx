@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import { useKaraokeRoom } from "@/hooks/useKaraokeRoom";
+import { useKaraokeRequests } from "@/hooks/useKaraokeRequests";
 import { useVoiceCall } from "@/hooks/useVoiceCall";
 import {
   addKaraokeSong,
@@ -13,6 +14,9 @@ import {
   updateKaraokePlayState,
   checkVideoExists,
   joinKaraokeRoom,
+  createSongRequest,
+  approveSongRequest,
+  rejectSongRequest,
 } from "@/lib/actions";
 import type { KaraokeSong } from "@/types";
 import YoutubePlayer, { type YoutubePlayerHandle } from "./YoutubePlayer";
@@ -48,13 +52,18 @@ interface RoomViewProps {
 
 export default function RoomView({ roomId, roomName, memberCount, onBack }: RoomViewProps) {
   const { currentUser } = useAuth();
+  const isAdmin = currentUser?.role === "admin";
   const { room, queue, messages, loading, error, reload } = useKaraokeRoom(roomId);
+  const { requests, reload: reloadRequests } = useKaraokeRequests(roomId);
 
   const playerRef = useRef<YoutubePlayerHandle>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const lastLoadedVideoRef = useRef<string | null>(null);
   const lastLoadTimeRef = useRef(0);
   const queueRef = useRef<KaraokeSong[]>(queue);
+  const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastBroadcastStateRef = useRef<{ isPlaying: boolean; position: number; videoId: string } | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -98,7 +107,7 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
       playerRef.current?.loadVideo(song.videoId, 0);
       setIsPlaying(true);
       setProgress(0);
-      broadcast({ kind: "load", videoId: song.videoId });
+      broadcast({ kind: "load", videoId: song.videoId, position: 0, isPlaying: true });
       try {
         await playKaraokeSong(roomId, song);
       } catch (e) {
@@ -113,7 +122,7 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
     playSongRef.current = handlePlaySong;
   });
 
-  // Lắng nghe broadcast để đồng bộ play/pause/seek/load
+  // Lắng nghe broadcast để đồng bộ play/pause/seek/load/sync
   useEffect(() => {
     if (!roomId) return;
     const ch = supabase.channel(`karaoke-sync-${roomId}`, {
@@ -121,6 +130,8 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
     });
     ch.on("broadcast", { event: "karaoke-sync" }, ({ payload }: { payload?: Record<string, unknown> }) => {
       const p = payload ?? {};
+      if (isAdmin) return;
+
       if (p.kind === "play") {
         playerRef.current?.play();
         setIsPlaying(true);
@@ -135,10 +146,25 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
         if (lastLoadedVideoRef.current !== p.videoId) {
           lastLoadedVideoRef.current = p.videoId;
           setVideoError(null);
-          playerRef.current?.loadVideo(p.videoId, 0);
-          setIsPlaying(true);
-          setProgress(0);
+          playerRef.current?.loadVideo(p.videoId, (p.position as number) ?? 0);
+          setIsPlaying((p.isPlaying as boolean) ?? true);
+          setProgress((p.position as number) ?? 0);
         }
+      } else if (p.kind === "sync" && typeof p.position === "number") {
+        const targetPos = p.position as number;
+        const currentPos = playerRef.current?.getCurrentTime() ?? 0;
+        if (Math.abs(currentPos - targetPos) > 3) {
+          playerRef.current?.seekTo(targetPos);
+        }
+        const shouldPlay = (p.isPlaying as boolean) ?? true;
+        if (shouldPlay && !isPlaying) {
+          playerRef.current?.play();
+          setIsPlaying(true);
+        } else if (!shouldPlay && isPlaying) {
+          playerRef.current?.pause();
+          setIsPlaying(false);
+        }
+        setProgress(targetPos);
       }
     });
     ch.subscribe();
@@ -147,9 +173,9 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
       supabase.removeChannel(ch);
       channelRef.current = null;
     };
-  }, [roomId]);
+  }, [roomId, isAdmin]);
 
-  // Khi bài hát hiện tại đổi (từ database) thì load video — CHỈ khi player đã sẵn sàng
+  // Khi bài hát hiện tại đổi (từ database) thì load video
   useEffect(() => {
     if (!playerReady) return;
     const videoId = room?.currentVideoId;
@@ -157,12 +183,13 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
     if (lastLoadedVideoRef.current === videoId) return;
     lastLoadedVideoRef.current = videoId;
     setVideoError(null);
-    playerRef.current?.loadVideo(videoId, room.currentPosition ?? 0);
-    setProgress(room.currentPosition ?? 0);
-    setIsPlaying(true); // loadVideoById tự động bắt đầu phát
+    const startPos = room.currentPosition ?? 0;
+    playerRef.current?.loadVideo(videoId, startPos);
+    setProgress(startPos);
+    setIsPlaying(true);
   }, [playerReady, room?.currentVideoId, room?.currentPosition]);
 
-  // Đồng bộ play/pause khi isPlaying trong DB thay đổi (cùng video)
+  // Đồng bộ play/pause khi isPlaying trong DB thay đổi
   useEffect(() => {
     if (!playerReady || !lastLoadedVideoRef.current || !room?.currentVideoId) return;
     if (lastLoadedVideoRef.current !== room.currentVideoId) return;
@@ -175,7 +202,7 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
     }
   }, [playerReady, room?.isPlaying, room?.currentVideoId]);
 
-  // Đồng bộ vị trí khi currentPosition trong DB thay đổi đáng kể (cùng video)
+  // Đồng bộ vị trí khi currentPosition trong DB thay đổi đáng kể
   useEffect(() => {
     if (!playerReady || !lastLoadedVideoRef.current || !room?.currentVideoId) return;
     if (lastLoadedVideoRef.current !== room.currentVideoId) return;
@@ -186,6 +213,89 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
       setProgress(targetPos);
     }
   }, [playerReady, room?.currentPosition, room?.currentVideoId]);
+
+  // Admin: broadcast vị trí liên tục mỗi 3 giây
+  useEffect(() => {
+    if (!isAdmin || !roomId) {
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
+        syncIntervalRef.current = null;
+      }
+      return;
+    }
+    syncIntervalRef.current = setInterval(() => {
+      const pos = playerRef.current?.getCurrentTime() ?? 0;
+      const playing = isPlaying;
+      const vid = lastLoadedVideoRef.current;
+      if (!vid) return;
+      const last = lastBroadcastStateRef.current;
+      if (!last || last.videoId !== vid || Math.abs(last.position - pos) > 2 || last.isPlaying !== playing) {
+        broadcast({ kind: "sync", videoId: vid, position: pos, isPlaying: playing });
+        lastBroadcastStateRef.current = { videoId: vid, position: pos, isPlaying: playing };
+      }
+    }, 3000);
+    return () => {
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
+        syncIntervalRef.current = null;
+      }
+    };
+  }, [isAdmin, roomId, isPlaying, broadcast]);
+
+  // Admin: heartbeat mỗi 5 giây để giữ sync khi rời tab
+  useEffect(() => {
+    if (!isAdmin || !roomId) {
+      if (heartbeatRef.current) {
+        clearInterval(heartbeatRef.current);
+        heartbeatRef.current = null;
+      }
+      return;
+    }
+    heartbeatRef.current = setInterval(() => {
+      const pos = playerRef.current?.getCurrentTime() ?? 0;
+      const vid = lastLoadedVideoRef.current;
+      if (vid) {
+        broadcast({ kind: "heartbeat", videoId: vid, position: pos, isPlaying: isPlaying });
+      }
+    }, 5000);
+    return () => {
+      if (heartbeatRef.current) {
+        clearInterval(heartbeatRef.current);
+        heartbeatRef.current = null;
+      }
+    };
+  }, [isAdmin, roomId, isPlaying, broadcast]);
+
+  // Nhân viên: khi mới vào phòng, yêu cầu admin sync vị trí hiện tại
+  useEffect(() => {
+    if (isAdmin || !roomId) return;
+    const timer = setTimeout(() => {
+      broadcast({ kind: "request_sync" });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [isAdmin, roomId, broadcast]);
+
+  // Admin: lắng nghe request_sync từ nhân viên mới vào
+  useEffect(() => {
+    if (!isAdmin || !roomId) return;
+    const ch = supabase.channel(`karaoke-sync-${roomId}`, {
+      config: { broadcast: { self: true } },
+    });
+    ch.on("broadcast", { event: "karaoke-sync" }, ({ payload }: { payload?: Record<string, unknown> }) => {
+      const p = payload ?? {};
+      if (p.kind === "request_sync") {
+        const pos = playerRef.current?.getCurrentTime() ?? 0;
+        const vid = lastLoadedVideoRef.current;
+        if (vid) {
+          broadcast({ kind: "sync", videoId: vid, position: pos, isPlaying: isPlaying });
+        }
+      }
+    });
+    ch.subscribe();
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, [isAdmin, roomId, isPlaying, broadcast]);
 
   // Đồng hồ tiến trình
   useEffect(() => {
@@ -214,6 +324,10 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
   }, []);
 
   const togglePlay = () => {
+    if (!isAdmin) {
+      notify("Chỉ Tổ Trưởng mới có quyền điều khiển video.");
+      return;
+    }
     if (videoError) {
       notify("Video đang bị lỗi, chọn bài khác nhé!");
       return;
@@ -221,26 +335,49 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
     if (isPlaying) {
       playerRef.current?.pause();
       setIsPlaying(false);
-      broadcast({ kind: "pause" });
+      broadcast({ kind: "pause", position: playerRef.current?.getCurrentTime() ?? 0 });
       updateKaraokePlayState(roomId, false, playerRef.current?.getCurrentTime() ?? 0).catch(() => {});
     } else {
       playerRef.current?.play();
       setIsPlaying(true);
-      broadcast({ kind: "play" });
+      broadcast({ kind: "play", position: playerRef.current?.getCurrentTime() ?? 0 });
       updateKaraokePlayState(roomId, true, playerRef.current?.getCurrentTime() ?? 0).catch(() => {});
     }
   };
 
   const handleNext = () => {
+    if (!isAdmin) {
+      notify("Chỉ Tổ Trưởng mới có quyền chuyển bài.");
+      return;
+    }
     const next = queueRef.current.find((s) => s.status === "queued");
     if (next) handlePlaySong(next);
     else notify("Hàng chờ đã hết, thêm bài hát mới nhé!");
   };
 
   const handlePrev = () => {
+    if (!isAdmin) {
+      notify("Chỉ Tổ Trưởng mới có quyền chuyển bài.");
+      return;
+    }
     const played = queueRef.current.filter((s) => s.status === "played");
     const prev = played[played.length - 1];
     if (prev) handlePlaySong(prev);
+  };
+
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isAdmin) {
+      notify("Chỉ Tổ Trưởng mới có quyền tua video.");
+      return;
+    }
+    if (videoError) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = (e.clientX - rect.left) / rect.width;
+    const target = Math.max(0, ratio * duration);
+    playerRef.current?.seekTo(target);
+    setProgress(target);
+    broadcast({ kind: "seek", position: target });
+    updateKaraokePlayState(roomId, isPlaying, target).catch(() => {});
   };
 
   const handleAdd = async (url: string) => {
@@ -262,6 +399,56 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
       notify(`Đã thêm "${info.title}" vào hàng chờ.`);
     } catch (e) {
       notify(e instanceof Error ? e.message : "Thêm bài hát thất bại.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRequest = async (url: string) => {
+    const videoId = extractYoutubeId(url);
+    if (!videoId) {
+      notify("Link YouTube không hợp lệ.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const exists = await checkVideoExists(videoId);
+      if (!exists) {
+        notify("Video không tồn tại hoặc không cho phép nhúng.");
+        setBusy(false);
+        return;
+      }
+      const info = await fetchYoutubeInfo(videoId);
+      await createSongRequest(roomId, videoId, info.title, info.thumbnail);
+      notify("Đã gửi yêu cầu bài hát. Chờ Tổ Trưởng duyệt!");
+    } catch (e) {
+      notify(e instanceof Error ? e.message : "Gửi yêu cầu thất bại.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleApproveRequest = async (requestId: string) => {
+    setBusy(true);
+    try {
+      await approveSongRequest(requestId, roomId);
+      notify("Đã duyệt yêu cầu bài hát.");
+      reloadRequests();
+    } catch (e) {
+      notify(e instanceof Error ? e.message : "Duyệt thất bại.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRejectRequest = async (requestId: string) => {
+    setBusy(true);
+    try {
+      await rejectSongRequest(requestId);
+      notify("Đã từ chối yêu cầu.");
+      reloadRequests();
+    } catch (e) {
+      notify(e instanceof Error ? e.message : "Từ chối thất bại.");
     } finally {
       setBusy(false);
     }
@@ -355,6 +542,9 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
               <span className="text-sm">Đang tải player...</span>
             </div>
           )}
+          {!isAdmin && playerReady && !videoError && (
+            <div className="absolute inset-0 z-20 cursor-default" title="Chỉ Tổ Trưởng mới điều khiển video" />
+          )}
         </div>
 
         {/* Now playing + controls */}
@@ -372,8 +562,12 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
               <button
                 type="button"
                 onClick={handlePrev}
-                className="w-10 h-10 rounded-full bg-background-100 text-foreground-700 flex items-center justify-center hover:bg-background-200 cursor-pointer"
-                title="Bài trước"
+                className={`w-10 h-10 rounded-full flex items-center justify-center cursor-pointer ${
+                  isAdmin
+                    ? "bg-background-100 text-foreground-700 hover:bg-background-200"
+                    : "bg-background-100 text-foreground-300 cursor-not-allowed"
+                }`}
+                title={isAdmin ? "Bài trước" : "Chỉ Tổ Trưởng mới điều khiển"}
               >
                 <i className="ri-skip-back-fill text-lg" />
               </button>
@@ -381,43 +575,45 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
                 type="button"
                 onClick={togglePlay}
                 className={`w-12 h-12 rounded-full flex items-center justify-center cursor-pointer ${
-                  videoError
+                  videoError || !isAdmin
                     ? "bg-foreground-300 text-foreground-500 cursor-not-allowed"
                     : "bg-primary-500 text-white hover:bg-primary-600"
                 }`}
-                title={isPlaying ? "Tạm dừng" : "Phát"}
-                disabled={!!videoError}
+                title={isAdmin ? (isPlaying ? "Tạm dừng" : "Phát") : "Chỉ Tổ Trưởng mới điều khiển"}
+                disabled={!!videoError || !isAdmin}
               >
                 <i className={`${isPlaying ? "ri-pause-fill" : "ri-play-fill"} text-2xl`} />
               </button>
               <button
                 type="button"
                 onClick={handleNext}
-                className="w-10 h-10 rounded-full bg-background-100 text-foreground-700 flex items-center justify-center hover:bg-background-200 cursor-pointer"
-                title="Bài tiếp theo"
+                className={`w-10 h-10 rounded-full flex items-center justify-center cursor-pointer ${
+                  isAdmin
+                    ? "bg-background-100 text-foreground-700 hover:bg-background-200"
+                    : "bg-background-100 text-foreground-300 cursor-not-allowed"
+                }`}
+                title={isAdmin ? "Bài tiếp theo" : "Chỉ Tổ Trưởng mới điều khiển"}
               >
                 <i className="ri-skip-forward-fill text-lg" />
               </button>
             </div>
           </div>
-          {/* Progress bar */}
           <div
-            className="mt-3 h-1.5 rounded-full bg-background-200 overflow-hidden cursor-pointer"
-            onClick={(e) => {
-              if (videoError) return;
-              const rect = e.currentTarget.getBoundingClientRect();
-              const ratio = (e.clientX - rect.left) / rect.width;
-              const target = Math.max(0, ratio * duration);
-              playerRef.current?.seekTo(target);
-              setProgress(target);
-              broadcast({ kind: "seek", position: target });
-            }}
+            className={`mt-3 h-1.5 rounded-full bg-background-200 overflow-hidden ${
+              isAdmin ? "cursor-pointer" : "cursor-default"
+            }`}
+            onClick={handleSeek}
           >
             <div
               className="h-full bg-accent-500 rounded-full transition-all"
               style={{ width: `${duration ? Math.min(100, (progress / duration) * 100) : 0}%` }}
             />
           </div>
+          {!isAdmin && (
+            <p className="mt-1.5 text-[11px] text-foreground-400 text-center">
+              Chế độ xem — chỉ Tổ Trưởng mới điều khiển video
+            </p>
+          )}
         </div>
 
         {/* Voice call */}
@@ -440,10 +636,16 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
           <div className="h-80">
             <QueuePanel
               queue={queue}
+              requests={requests}
               busy={busy}
-              onPlay={handlePlaySong}
+              isAdmin={isAdmin}
+              currentUserId={currentUser?.id}
+              onPlay={isAdmin ? handlePlaySong : () => notify("Chỉ Tổ Trưởng mới phát bài hát.")}
               onRemove={handleRemove}
               onAdd={handleAdd}
+              onRequest={handleRequest}
+              onApprove={handleApproveRequest}
+              onReject={handleRejectRequest}
             />
           </div>
           <div className="h-80">

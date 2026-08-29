@@ -1,19 +1,41 @@
-export type Role = "admin" | "staff";
+export type KaraokeSongRequestStatus = "pending" | "approved" | "rejected";
 
-export type PresenceStatus = "online" | "busy" | "away" | "offline";
+export interface KaraokeSongRequest {
+  id: string;
+  roomId: string;
+  videoId: string;
+  title: string;
+  thumbnail?: string;
+  requestedBy: string;
+  requestedByName: string;
+  status: KaraokeSongRequestStatus;
+  createdAt: string;
+}
 
-export type ChannelPlatform = "facebook" | "telegram" | "tiktok";
+export interface TeamDailyStat {
+  id: string;
+  date: string;
+  newCustomers: number;
+  totalMoneySent: number;
+  totalDeposits: number;
+  totalBets: number;
+  registeredCustomers: number;
+  betRounds: number;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
-export type ChannelStatus = "connected" | "disconnected" | "pending";
-
-export type ConversationStatus =
-  | "unread"
-  | "unanswered"
-  | "processing"
-  | "answered"
-  | "completed";
-
-export type MessageStatus = "sending" | "sent" | "failed";
+export interface Movie {
+  id: string;
+  title: string;
+  description?: string;
+  videoUrl: string;
+  thumbnail?: string;
+  category?: string;
+  createdBy?: string;
+  createdAt: string;
+}
 
 export interface User {
   id: string;
@@ -329,3 +351,20 @@ export interface StaffPunishment {
   isRead: boolean;
   createdAt: string;
 }
+
+export type Role = "admin" | "staff";
+
+export type PresenceStatus = "online" | "busy" | "away" | "offline";
+
+export type ChannelPlatform = "facebook" | "telegram" | "tiktok";
+
+export type ChannelStatus = "connected" | "disconnected" | "pending";
+
+export type ConversationStatus =
+  | "unread"
+  | "unanswered"
+  | "processing"
+  | "answered"
+  | "completed";
+
+export type MessageStatus = "sending" | "sent" | "failed";
