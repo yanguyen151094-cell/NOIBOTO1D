@@ -66,6 +66,15 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
 
   const createPeerConnection = useCallback(
     (peerId: string) => {
+      // Đóng connection cũ nếu có để tránh leak / trùng lặp
+      if (connectionsRef.current[peerId]) {
+        try {
+          connectionsRef.current[peerId].close();
+        } catch {
+          /* ignore */
+        }
+      }
+
       const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
       // Add local audio tracks
@@ -140,9 +149,10 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
       try {
         switch (payload.type) {
           case "join": {
-            // Someone joined — create offer for them
-            if (peerNamesRef.current[payload.from] !== payload.name) {
-              peerNamesRef.current[payload.from] = payload.name || "Thành viên";
+            // Tránh glare condition: 2 bên cùng tạo offer đâm nhau
+            // Quy tắc: ai có userId lớn hơn (theo so sánh chuỗi) thì tạo offer
+            if (userIdRef.current < payload.from) {
+              break;
             }
             const pc = createPeerConnection(payload.from);
             const offer = await pc.createOffer();
@@ -162,7 +172,7 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
           case "offer": {
             const pc = createPeerConnection(payload.from);
             await pc.setRemoteDescription(
-              new RTCSessionDescription(payload.data as any)
+              new RTCSessionDescription(payload.data as unknown as RTCSessionDescriptionInit)
             );
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
@@ -182,7 +192,7 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
             const pc = connectionsRef.current[payload.from];
             if (pc) {
               await pc.setRemoteDescription(
-                new RTCSessionDescription(payload.data as any)
+                new RTCSessionDescription(payload.data as unknown as RTCSessionDescriptionInit)
               );
             }
             break;
@@ -191,7 +201,7 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
             const pc = connectionsRef.current[payload.from];
             if (pc) {
               await pc.addIceCandidate(
-                new RTCIceCandidate(payload.data as any)
+                new RTCIceCandidate(payload.data as unknown as RTCIceCandidateInit)
               );
             }
             break;
