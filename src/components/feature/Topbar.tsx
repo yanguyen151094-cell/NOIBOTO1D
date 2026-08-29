@@ -205,7 +205,7 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
                 {currentUser?.name}
               </p>
               <p className="text-[11px] text-foreground-500 whitespace-nowrap">
-                {isAdmin ? "Ghe OBICARE" : "Nhân viên"}
+                {isAdmin ? "Tổ Trưởng ( OBICARE )" : "Nhân viên"}
               </p>
             </div>
             <i className="ri-arrow-down-s-line text-foreground-500 hidden sm:block" />
@@ -215,7 +215,7 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
               <div className="px-4 py-2.5 border-b border-background-100">
                 <p className="text-sm font-semibold text-foreground-900">{currentUser?.name}</p>
                 <p className="text-[11px] text-foreground-500">
-                  {isAdmin ? "Ghe OBICARE" : "Nhân viên"}
+                  {isAdmin ? "Tổ Trưởng ( OBICARE )" : "Nhân viên"}
                 </p>
               </div>
               <button

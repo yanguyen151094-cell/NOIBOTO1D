@@ -39,10 +39,16 @@ export default function Accounts() {
   };
 
   const { data: items, loading, error, reload } = useQuery<AccountVault[]>(async () => {
-    const { data, error: e } = await supabase
+    let query = supabase
       .from("account_vault")
       .select("*")
       .order("created_at", { ascending: false });
+
+    if (!isAdmin && currentUser) {
+      query = query.or(`owner_id.eq.${currentUser.id},owner_id.is.null`);
+    }
+
+    const { data, error: e } = await query;
     if (e) throw e;
     return (data ?? []).map(mapAccountVault);
   });

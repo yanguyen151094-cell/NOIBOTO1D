@@ -1,10 +1,11 @@
+import React from "react";
 import { useEffect, useState } from "react";
 import Avatar from "@/components/base/Avatar";
 import Modal from "@/components/base/Modal";
 import { useAuth } from "@/context/AuthContext";
 import { useQuery } from "@/hooks/useQuery";
 import { supabase } from "@/lib/supabase";
-import { createPlan, deletePlan } from "@/lib/actions";
+import { createPlan, deletePlan, uploadImage } from "@/lib/actions";
 import { mapPlan } from "@/lib/mappers";
 import { formatRelative } from "@/utils/ui";
 import type { Plan } from "@/types";
@@ -36,6 +37,9 @@ export default function Plans() {
   const [deleteTarget, setDeleteTarget] = useState<Plan | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState("");
+  const [uploading, setUploading] = useState(false);
 
   const notify = (msg: string) => {
     setToast(msg);
@@ -69,20 +73,41 @@ export default function Plans() {
     };
   }, [reload]);
 
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      notify("Ảnh quá lớn (tối đa 5MB).");
+      return;
+    }
+    setImageFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => setImagePreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
   const handleCreate = async () => {
     if (!title.trim() || !content.trim()) return;
     setBusy(true);
+    setUploading(true);
     try {
-      await createPlan(title.trim(), content.trim());
+      let imageUrl: string | undefined;
+      if (imageFile) {
+        imageUrl = await uploadImage(imageFile, "plans");
+      }
+      await createPlan(title.trim(), content.trim(), imageUrl);
       notify("Đã gửi kế hoạch.");
       setTitle("");
       setContent("");
+      setImageFile(null);
+      setImagePreview("");
       setComposeOpen(false);
       reload();
     } catch (e) {
       notify(e instanceof Error ? e.message : "Gửi kế hoạch thất bại.");
     } finally {
       setBusy(false);
+      setUploading(false);
     }
   };
 
@@ -183,6 +208,15 @@ export default function Plans() {
                 <p className="mt-2 text-sm text-foreground-700 leading-relaxed whitespace-pre-line">
                   {p.content}
                 </p>
+                {p.imageUrl && (
+                  <div className="mt-3">
+                    <img
+                      src={p.imageUrl}
+                      alt="Kế hoạch"
+                      className="max-h-64 rounded-lg border border-background-200 object-contain"
+                    />
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -235,6 +269,29 @@ export default function Plans() {
                 placeholder="Mô tả công việc cần thực hiện..."
                 className="w-full px-3 py-2.5 rounded-md border border-background-300 bg-background-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none"
               />
+            </div>
+            <div>
+              <label className="block text-sm text-foreground-700 mb-1.5">Hình ảnh đính kèm</label>
+              <div className="flex items-center gap-3">
+                <label className="px-3 py-2 rounded-md border border-background-300 bg-background-50 text-sm text-foreground-700 cursor-pointer hover:bg-background-100 whitespace-nowrap">
+                  <i className="ri-image-line mr-1" />
+                  Chọn ảnh
+                  <input type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
+                </label>
+                {imagePreview && (
+                  <div className="relative">
+                    <img src={imagePreview} alt="Preview" className="h-12 w-12 rounded-md object-cover border border-background-200" />
+                    <button
+                      type="button"
+                      onClick={() => { setImageFile(null); setImagePreview(""); }}
+                      className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center cursor-pointer"
+                    >
+                      <i className="ri-close-line" />
+                    </button>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-foreground-400 mt-1">Tối đa 5MB, định dạng ảnh.</p>
             </div>
           </div>
         </Modal>

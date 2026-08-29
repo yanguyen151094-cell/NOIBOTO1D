@@ -101,7 +101,7 @@ export default function Settings() {
               <p className="text-sm text-foreground-500">@{currentUser?.username}</p>
               <span className="text-xs px-2 py-0.5 rounded-full bg-primary-100 text-primary-700 mt-1.5 inline-flex items-center gap-1">
                 <i className="ri-shield-check-line" />
-                {currentUser?.role === "admin" ? "Ghe OBICARE" : "Nhân viên"}
+                {currentUser?.role === "admin" ? "Tổ Trưởng ( OBICARE )" : "Nhân viên"}
               </span>
             </div>
           </div>

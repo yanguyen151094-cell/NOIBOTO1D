@@ -2,6 +2,7 @@ import type {
   AccountVault,
   ActivityLog,
   Announcement,
+  AnnouncementComment,
   AppNotification,
   Assignment,
   Channel,
@@ -22,8 +23,11 @@ import type {
   Reward,
   Role,
   StaffComment,
+  StaffDailyStat,
   StaffEvaluation,
   StaffPost,
+  StaffPunishment,
+  Report,
   User,
   VaultPlatform,
 } from "@/types";
@@ -157,6 +161,7 @@ export function mapCustomerNote(row: Record<string, unknown>): CustomerNote {
     note: (row.note as string) ?? "",
     updatedAt: (row.updated_at as string) ?? "",
     updatedByName: (row.updated_by_name as string) ?? undefined,
+    ownerId: (row.owner_id as string) ?? undefined,
   };
 }
 
@@ -192,19 +197,7 @@ export function mapAccountVault(row: Record<string, unknown>): AccountVault {
     isDead: (row.is_dead as boolean) ?? false,
     providedByLeader: (row.provided_by_leader as boolean) ?? false,
     channelStatus: (row.channel_status as string) ?? "normal",
-  };
-}
-
-export function mapStaffEvaluation(row: Record<string, unknown>): StaffEvaluation {
-  return {
-    id: row.id as string,
-    staffId: row.staff_id as string,
-    staffName: (row.staff_name as string) ?? "",
-    evaluatorName: (row.evaluator_name as string) ?? "",
-    rating: Number(row.rating ?? 0),
-    title: (row.title as string) ?? "",
-    comment: (row.comment as string) ?? "",
-    createdAt: (row.created_at as string) ?? "",
+    ownerId: (row.owner_id as string) ?? undefined,
   };
 }
 
@@ -247,13 +240,39 @@ export function mapStaffComment(row: Record<string, unknown>): StaffComment {
   };
 }
 
+export function mapStaffEvaluation(row: Record<string, unknown>): StaffEvaluation {
+  return {
+    id: row.id as string,
+    staffId: row.staff_id as string,
+    staffName: (row.staff_name as string) ?? "",
+    evaluatorName: (row.evaluator_name as string) ?? "",
+    rating: Number(row.rating ?? 0),
+    title: (row.title as string) ?? "",
+    comment: (row.comment as string) ?? "",
+    imageUrl: (row.image_url as string) ?? undefined,
+    createdAt: (row.created_at as string) ?? "",
+  };
+}
+
+export function mapAnnouncementComment(row: Record<string, unknown>): AnnouncementComment {
+  return {
+    id: row.id as string,
+    announcementId: row.announcement_id as string,
+    authorId: row.author_id as string,
+    authorName: (row.author_name as string) ?? "",
+    content: (row.content as string) ?? "",
+    createdAt: (row.created_at as string) ?? "",
+  };
+}
+
 export function mapAnnouncement(row: Record<string, unknown>): Announcement {
   return {
     id: row.id as string,
     authorId: row.author_id as string,
-    authorName: (row.author_name as string) ?? "Ghe OBICARE",
+    authorName: (row.author_name as string) ?? "Tổ Trưởng ( OBICARE )",
     title: (row.title as string) ?? "",
     content: (row.content as string) ?? "",
+    imageUrl: (row.image_url as string) ?? undefined,
     createdAt: (row.created_at as string) ?? "",
     likeCount: Number(row.like_count ?? 0),
     liked: (row.liked as boolean) ?? false,
@@ -264,9 +283,22 @@ export function mapPlan(row: Record<string, unknown>): Plan {
   return {
     id: row.id as string,
     authorId: row.author_id as string,
-    authorName: (row.author_name as string) ?? "Ghe OBICARE",
+    authorName: (row.author_name as string) ?? "Tổ Trưởng ( OBICARE )",
     title: (row.title as string) ?? "",
     content: (row.content as string) ?? "",
+    imageUrl: (row.image_url as string) ?? undefined,
+    createdAt: (row.created_at as string) ?? "",
+  };
+}
+
+export function mapReport(row: Record<string, unknown>): Report {
+  return {
+    id: row.id as string,
+    authorId: row.author_id as string,
+    authorName: (row.author_name as string) ?? "",
+    title: (row.title as string) ?? "",
+    content: (row.content as string) ?? "",
+    imageUrl: (row.image_url as string) ?? undefined,
     createdAt: (row.created_at as string) ?? "",
   };
 }
@@ -325,5 +357,32 @@ export function mapKaraokeMessage(row: Record<string, unknown>): KaraokeMessage 
     senderName: (row.sender_name as string) ?? "",
     content: (row.content as string) ?? "",
     sentAt: row.sent_at as string,
+  };
+}
+
+export function mapStaffDailyStat(row: Record<string, unknown>): StaffDailyStat {
+  return {
+    id: row.id as string,
+    staffId: row.staff_id as string,
+    staffName: (row.staff_name as string) ?? "",
+    date: (row.date as string) ?? "",
+    newCustomers: Number(row.new_customers ?? 0),
+    totalDeposits: Number(row.total_deposits ?? 0),
+    totalBets: Number(row.total_bets ?? 0),
+    createdAt: (row.created_at as string) ?? "",
+  };
+}
+
+export function mapStaffPunishment(row: Record<string, unknown>): StaffPunishment {
+  return {
+    id: row.id as string,
+    staffId: row.staff_id as string,
+    staffName: (row.staff_name as string) ?? "",
+    reason: (row.reason as string) ?? "",
+    amount: Number(row.amount ?? 0),
+    punishmentDate: (row.punishment_date as string) ?? "",
+    createdByName: (row.created_by_name as string) ?? "",
+    isRead: (row.is_read as boolean) ?? false,
+    createdAt: (row.created_at as string) ?? "",
   };
 }

@@ -19,6 +19,8 @@ import Announcements from "@/pages/announcements/page";
 import Plans from "@/pages/plans/page";
 import Rewards from "@/pages/rewards/page";
 import Karaoke from "@/pages/karaoke/page";
+import StaffStats from "@/pages/staff-stats/page";
+import StaffPunishments from "@/pages/staff-punishments/page";
 
 const routes: RouteObject[] = [
   {
@@ -46,6 +48,8 @@ const routes: RouteObject[] = [
       { path: "plans", element: <Plans /> },
       { path: "rewards", element: <Rewards /> },
       { path: "karaoke", element: <Karaoke /> },
+      { path: "staff-stats", element: <StaffStats /> },
+      { path: "staff-punishments", element: <StaffPunishments /> },
     ],
   },
   {

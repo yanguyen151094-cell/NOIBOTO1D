@@ -126,7 +126,7 @@ export default function Logs() {
                         <div>
                           <p className="font-medium text-foreground-900">{l.actorName}</p>
                           <p className="text-[11px] text-foreground-400">
-                            {l.actorRole === "admin" ? "Ghe OBICARE" : "Nhân viên"}
+                            {l.actorRole === "admin" ? "Tổ Trưởng ( OBICARE )" : "Nhân viên"}
                           </p>
                         </div>
                       </div>
@@ -156,7 +156,7 @@ export default function Logs() {
                   <Avatar name={l.actorName} size="sm" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-foreground-900 truncate">{l.actorName}</p>
-                    <p className="text-[11px] text-foreground-400">{l.actorRole === "admin" ? "Ghe OBICARE" : "Nhân viên"}</p>
+                    <p className="text-[11px] text-foreground-400">{l.actorRole === "admin" ? "Tổ Trưởng ( OBICARE )" : "Nhân viên"}</p>
                   </div>
                   <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-background-100 text-foreground-600 shrink-0">
                     {CATEGORY_LABEL[l.category] ?? l.category}

@@ -12,6 +12,7 @@ import {
   sendKaraokeMessage,
   updateKaraokePlayState,
   checkVideoExists,
+  joinKaraokeRoom,
 } from "@/lib/actions";
 import type { KaraokeSong } from "@/types";
 import YoutubePlayer, { type YoutubePlayerHandle } from "./YoutubePlayer";
@@ -68,6 +69,13 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
     currentUser?.id ?? "",
     currentUser?.name ?? "Thành viên"
   );
+
+  // Auto join phòng khi vào
+  useEffect(() => {
+    if (roomId) {
+      joinKaraokeRoom(roomId).catch(() => {});
+    }
+  }, [roomId]);
 
   useEffect(() => {
     queueRef.current = queue;
@@ -307,20 +315,12 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
     <div className="flex flex-col h-full min-w-0">
       {/* Header */}
       <div className="flex items-center gap-3 px-3 md:px-4 py-3 border-b border-background-200">
-        <button
-          type="button"
-          onClick={onBack}
-          className="md:hidden w-8 h-8 rounded-lg flex items-center justify-center text-foreground-600 hover:bg-background-100 cursor-pointer"
-          aria-label="Quay lại"
-        >
-          <i className="ri-arrow-left-line" />
-        </button>
         <div className="w-9 h-9 rounded-lg bg-accent-500 text-white flex items-center justify-center shrink-0">
           <i className="ri-mic-line text-lg" />
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-foreground-900 break-words leading-snug">{roomName}</p>
-          <p className="text-[11px] text-foreground-500">{memberCount} thành viên · Phòng hát karaoke</p>
+          <p className="text-[11px] text-foreground-500">{memberCount} thành viên · Phòng hát karaoke chung</p>
         </div>
         {playing && (
           <span className="px-2.5 py-1 rounded-full bg-accent-100 text-accent-900 text-xs font-medium whitespace-nowrap">

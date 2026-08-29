@@ -21,6 +21,8 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/customer-notes", label: "Ghi chú khách", icon: "ri-sticky-note-line" },
   { to: "/accounts", label: "Kho tài khoản", icon: "ri-key-2-line" },
   { to: "/evaluations", label: "Đánh giá", icon: "ri-star-line" },
+  { to: "/staff-stats", label: "Số liệu nhân viên", icon: "ri-bar-chart-grouped-line" },
+  { to: "/staff-punishments", label: "Nhận phạt", icon: "ri-alarm-warning-line" },
   { to: "/staff", label: "Nhân viên", icon: "ri-team-line", adminOnly: true },
   { to: "/channels", label: "Kết nối kênh", icon: "ri-plug-line" },
   { to: "/reports", label: "Báo cáo", icon: "ri-bar-chart-line", adminOnly: true },

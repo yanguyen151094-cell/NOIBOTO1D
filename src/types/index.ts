@@ -174,6 +174,7 @@ export interface CustomerNote {
   note: string;
   updatedAt: string;
   updatedByName?: string;
+  ownerId?: string;
 }
 
 export interface AccountVault {
@@ -191,6 +192,7 @@ export interface AccountVault {
   isDead: boolean;
   providedByLeader: boolean;
   channelStatus: string;
+  ownerId?: string;
 }
 
 export interface StaffEvaluation {
@@ -201,6 +203,7 @@ export interface StaffEvaluation {
   rating: number;
   title: string;
   comment: string;
+  imageUrl?: string;
   createdAt: string;
 }
 
@@ -257,9 +260,19 @@ export interface Announcement {
   authorName: string;
   title: string;
   content: string;
+  imageUrl?: string;
   createdAt: string;
   likeCount: number;
   liked: boolean;
+}
+
+export interface AnnouncementComment {
+  id: string;
+  announcementId: string;
+  authorId: string;
+  authorName: string;
+  content: string;
+  createdAt: string;
 }
 
 export interface Plan {
@@ -268,6 +281,17 @@ export interface Plan {
   authorName: string;
   title: string;
   content: string;
+  imageUrl?: string;
+  createdAt: string;
+}
+
+export interface Report {
+  id: string;
+  authorId: string;
+  authorName: string;
+  title: string;
+  content: string;
+  imageUrl?: string;
   createdAt: string;
 }
 
@@ -280,5 +304,28 @@ export interface Reward {
   recipientName: string;
   rewardContent: string;
   amount: number;
+  createdAt: string;
+}
+
+export interface StaffDailyStat {
+  id: string;
+  staffId: string;
+  staffName?: string;
+  date: string;
+  newCustomers: number;
+  totalDeposits: number;
+  totalBets: number;
+  createdAt: string;
+}
+
+export interface StaffPunishment {
+  id: string;
+  staffId: string;
+  staffName?: string;
+  reason: string;
+  amount: number;
+  punishmentDate: string;
+  createdByName?: string;
+  isRead: boolean;
   createdAt: string;
 }

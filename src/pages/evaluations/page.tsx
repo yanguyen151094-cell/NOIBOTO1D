@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useQuery } from "@/hooks/useQuery";
 import { supabase } from "@/lib/supabase";
 import { mapStaffEvaluation } from "@/lib/mappers";
-import { createEvaluation, deleteEvaluation, type EvaluationInput } from "@/lib/actions";
+import { createEvaluation, deleteEvaluation, uploadImage, type EvaluationInput } from "@/lib/actions";
 import { formatDateTime } from "@/utils/ui";
 import type { StaffEvaluation } from "@/types";
 import { mockEvaluations, mockStaffProfiles } from "@/mocks/appData";
@@ -66,7 +66,7 @@ export default function Evaluations() {
       const evaluations = (evalRes.data ?? []).map((e) => {
         const m = mapStaffEvaluation(e);
         m.staffName = nameMap[e.staff_id] ?? "Nhân viên";
-        m.evaluatorName = nameMap[e.evaluator_id] ?? "Ghe OBICARE";
+        m.evaluatorName = nameMap[e.evaluator_id] ?? "Tổ Trưởng ( OBICARE )";
         return m;
       });
 
@@ -250,6 +250,11 @@ export default function Evaluations() {
                       {e.comment && (
                         <p className="text-sm text-foreground-600 mt-0.5 leading-snug">{e.comment}</p>
                       )}
+                      {e.imageUrl && (
+                        <div className="mt-2">
+                          <img src={e.imageUrl} alt="Đánh giá" className="max-h-48 rounded-lg border border-background-200 object-contain" />
+                        </div>
+                      )}
                       <p className="text-xs text-foreground-400 mt-1.5">
                         {formatDateTime(e.createdAt)}
                         {isAdmin ? ` · Bởi ${e.evaluatorName}` : ""}
@@ -378,17 +383,37 @@ function AddModal({
   const [rating, setRating] = useState(5);
   const [title, setTitle] = useState("");
   const [comment, setComment] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState("");
+  const [uploading, setUploading] = useState(false);
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { alert("Ảnh quá lớn (tối đa 5MB)."); return; }
+    setImageFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => setImagePreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
 
   const selected = staff.find((s) => s.id === staffId);
 
-  const submit = () => {
+  const submit = async () => {
     if (!selected) return;
+    setUploading(true);
+    let imageUrl: string | undefined;
+    if (imageFile) {
+      imageUrl = await uploadImage(imageFile, "evaluations");
+    }
+    setUploading(false);
     onSave({
       staffId: selected.id,
       staffName: selected.name,
       rating,
       title: title.trim(),
       comment: comment.trim(),
+      imageUrl,
     });
   };
 
@@ -478,6 +503,23 @@ function AddModal({
             className="w-full px-3 py-2.5 rounded-md border border-background-300 bg-background-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none"
           />
           <p className="text-xs text-foreground-400 text-right mt-1">{comment.length}/500</p>
+        </div>
+        <div>
+          <label className="block text-sm text-foreground-700 mb-1.5">Hình ảnh đính kèm</label>
+          <div className="flex items-center gap-3">
+            <label className="px-3 py-2 rounded-md border border-background-300 bg-background-50 text-sm text-foreground-700 cursor-pointer hover:bg-background-100 whitespace-nowrap">
+              <i className="ri-image-line mr-1" />
+              Chọn ảnh
+              <input type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
+            </label>
+            {imagePreview && (
+              <div className="relative">
+                <img src={imagePreview} alt="Preview" className="h-12 w-12 rounded-md object-cover border border-background-200" />
+                <button type="button" onClick={() => { setImageFile(null); setImagePreview(""); }} className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center cursor-pointer"><i className="ri-close-line" /></button>
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-foreground-400 mt-1">Tối đa 5MB.</p>
         </div>
       </div>
     </Modal>

@@ -89,7 +89,6 @@ export async function callManageUsers(payload: ManageUsersPayload): Promise<{ ok
   const body = payload;
   const { data, error } = await supabase.functions.invoke("manage-users", { body });
   if (error) throw new Error(error.message);
-  // Now Edge Function always returns 200; check ok flag in body
   if (data?.ok === false || data?.error) {
     throw new Error(data.error as string || "Lỗi từ máy chủ.");
   }
@@ -215,6 +214,7 @@ export async function upsertCustomerNote(
       note: input.note,
       updated_by: userId,
       updated_at: now,
+      owner_id: userId,
     },
     { onConflict: "customer_id" }
   );
@@ -250,6 +250,7 @@ export async function createAccountVault(input: AccountVaultInput): Promise<void
     provided_by_leader: input.providedByLeader,
     channel_status: input.channelStatus,
     created_by: userId,
+    owner_id: userId,
   });
   if (error) throw error;
 }
@@ -286,6 +287,7 @@ export interface EvaluationInput {
   rating: number;
   title: string;
   comment: string;
+  imageUrl?: string;
 }
 
 export async function createEvaluation(input: EvaluationInput): Promise<void> {
@@ -297,6 +299,7 @@ export async function createEvaluation(input: EvaluationInput): Promise<void> {
     rating: input.rating,
     title: input.title,
     comment: input.comment,
+    image_url: input.imageUrl ?? null,
     created_at: now,
   });
   if (evalError) throw evalError;
@@ -402,7 +405,6 @@ export async function createStaffPost(
   });
   if (error) throw error;
 
-  // Thông báo cho chủ tường nếu người khác đăng bài lên tường của họ
   if (wallOwnerId !== userId) {
     const { data: profile } = await supabase
       .from("profiles")
@@ -438,7 +440,6 @@ export async function createStaffComment(postId: string, content: string): Promi
   });
   if (error) throw error;
 
-  // Thông báo realtime cho chủ bài viết (nếu không phải tự bình luận bài mình)
   const { data: post } = await supabase
     .from("staff_posts")
     .select("staff_id")
@@ -461,7 +462,6 @@ export async function createStaffComment(postId: string, content: string): Promi
       created_at: new Date().toISOString(),
     });
     if (ntfError) {
-      // Không throw — bình luận vẫn thành công dù thông báo lỗi
       console.warn("Không thể tạo thông báo:", ntfError.message);
     }
   }
@@ -496,19 +496,20 @@ export async function updateProfileAvatar(avatarUrl: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function createAnnouncement(title: string, content: string): Promise<void> {
+export async function createAnnouncement(title: string, content: string, imageUrl?: string): Promise<void> {
   const userId = await requireUserId();
   const { data: profile } = await supabase
     .from("profiles")
     .select("name")
     .eq("id", userId)
     .maybeSingle();
-  const authorName = profile?.name ?? "Ghe OBICARE";
+  const authorName = profile?.name ?? "Tổ Trưởng ( OBICARE )";
   const { error } = await supabase.from("announcements").insert({
     author_id: userId,
     author_name: authorName,
     title,
     content,
+    image_url: imageUrl ?? null,
   });
   if (error) throw error;
 }
@@ -536,19 +537,20 @@ export async function toggleLikeAnnouncement(id: string, liked: boolean): Promis
   }
 }
 
-export async function createPlan(title: string, content: string): Promise<void> {
+export async function createPlan(title: string, content: string, imageUrl?: string): Promise<void> {
   const userId = await requireUserId();
   const { data: profile } = await supabase
     .from("profiles")
     .select("name")
     .eq("id", userId)
     .maybeSingle();
-  const authorName = profile?.name ?? "Ghe OBICARE";
+  const authorName = profile?.name ?? "Tổ Trưởng ( OBICARE )";
   const { error } = await supabase.from("plans").insert({
     author_id: userId,
     author_name: authorName,
     title,
     content,
+    image_url: imageUrl ?? null,
   });
   if (error) throw error;
 }
@@ -703,12 +705,9 @@ export async function playKaraokeSong(
   roomId: string,
   song: { id: string; videoId: string; title: string; thumbnail?: string }
 ): Promise<void> {
-  // Đánh dấu các bài đang phát khác là đã phát
   await supabase.from("karaoke_queue").update({ status: "played" }).eq("room_id", roomId).eq("status", "playing");
-  // Đánh dấu bài được chọn là đang phát
   const { error } = await supabase.from("karaoke_queue").update({ status: "playing" }).eq("id", song.id);
   if (error) throw error;
-  // Cập nhật phòng để người vào sau biết bài hiện tại
   const { error: rErr } = await supabase
     .from("karaoke_rooms")
     .update({
@@ -734,10 +733,125 @@ export async function updateKaraokePlayState(
   if (error) throw error;
 }
 
+export async function createReport(title: string, content: string, imageUrl?: string): Promise<void> {
+  const userId = await requireUserId();
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("name")
+    .eq("id", userId)
+    .maybeSingle();
+  const authorName = profile?.name ?? "";
+  const { error } = await supabase.from("reports").insert({
+    author_id: userId,
+    author_name: authorName,
+    title,
+    content,
+    image_url: imageUrl ?? null,
+  });
+  if (error) throw error;
+}
+
+export async function deleteReport(id: string): Promise<void> {
+  const { error } = await supabase.from("reports").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function createAnnouncementComment(announcementId: string, content: string): Promise<void> {
+  const userId = await requireUserId();
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("name")
+    .eq("id", userId)
+    .maybeSingle();
+  const authorName = profile?.name ?? "";
+  const { error } = await supabase.from("announcement_comments").insert({
+    announcement_id: announcementId,
+    author_id: userId,
+    author_name: authorName,
+    content,
+  });
+  if (error) throw error;
+}
+
+export async function deleteAnnouncementComment(id: string): Promise<void> {
+  const { error } = await supabase.from("announcement_comments").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function uploadImage(file: File, folder: string): Promise<string> {
+  const ext = file.name.split(".").pop() ?? "jpg";
+  const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+  const { error } = await supabase.storage.from("uploads").upload(path, file, {
+    cacheControl: "3600",
+    upsert: false,
+  });
+  if (error) throw error;
+  const { data } = supabase.storage.from("uploads").getPublicUrl(path);
+  return data.publicUrl;
+}
+
 export async function sendKaraokeMessage(roomId: string, content: string): Promise<void> {
   const userId = await requireUserId();
   const { error } = await supabase
     .from("karaoke_messages")
     .insert({ room_id: roomId, sender_id: userId, content, sent_at: new Date().toISOString() });
+  if (error) throw error;
+}
+
+// ===== Staff Daily Stats =====
+
+export interface StaffDailyStatInput {
+  date: string;
+  newCustomers: number;
+  totalDeposits: number;
+  totalBets: number;
+}
+
+export async function upsertStaffDailyStat(input: StaffDailyStatInput): Promise<void> {
+  const userId = await requireUserId();
+  const { error } = await supabase.from("staff_daily_stats").upsert(
+    {
+      staff_id: userId,
+      date: input.date,
+      new_customers: input.newCustomers,
+      total_deposits: input.totalDeposits,
+      total_bets: input.totalBets,
+    },
+    { onConflict: "staff_id,date" }
+  );
+  if (error) throw error;
+}
+
+// ===== Staff Punishments =====
+
+export interface StaffPunishmentInput {
+  staffId: string;
+  reason: string;
+  amount: number;
+  punishmentDate: string;
+}
+
+export async function createStaffPunishment(input: StaffPunishmentInput): Promise<void> {
+  const userId = await requireUserId();
+  const { error } = await supabase.from("staff_punishments").insert({
+    staff_id: input.staffId,
+    reason: input.reason,
+    amount: input.amount,
+    punishment_date: input.punishmentDate,
+    created_by: userId,
+  });
+  if (error) throw error;
+}
+
+export async function deleteStaffPunishment(id: string): Promise<void> {
+  const { error } = await supabase.from("staff_punishments").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function markPunishmentRead(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("staff_punishments")
+    .update({ is_read: true })
+    .eq("id", id);
   if (error) throw error;
 }

@@ -64,7 +64,9 @@ export default function CustomerNotes() {
       supabase.from("customers").select("*"),
       supabase.from("customer_notes").select("*"),
       supabase.from("profiles").select("id, name"),
-      supabase.from("customer_accounts").select("*, profiles!customer_accounts_created_by_fkey(name)"),
+      isAdmin
+        ? supabase.from("customer_accounts").select("*, profiles!customer_accounts_created_by_fkey(name)")
+        : supabase.from("customer_accounts").select("*, profiles!customer_accounts_created_by_fkey(name)").eq("created_by", user?.id ?? ""),
     ]);
     if (custRes.error) throw custRes.error;
     if (noteRes.error) throw noteRes.error;
