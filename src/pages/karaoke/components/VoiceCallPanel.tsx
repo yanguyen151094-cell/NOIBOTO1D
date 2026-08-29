@@ -8,6 +8,7 @@ interface VoicePeer {
 
 interface VoiceCallPanelProps {
   isActive: boolean;
+  isJoining: boolean;
   isMuted: boolean;
   localStream: MediaStream | null;
   peers: Record<string, VoicePeer>;
@@ -31,6 +32,7 @@ function AudioPlayer({ stream, muted = false }: { stream: MediaStream; muted?: b
 
 export default function VoiceCallPanel({
   isActive,
+  isJoining,
   isMuted,
   localStream,
   peers,
@@ -46,24 +48,42 @@ export default function VoiceCallPanel({
 
   if (!isActive) {
     return (
-      <div className="rounded-lg border border-background-200 bg-background-50 p-3 md:p-4 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-full bg-secondary-100 text-secondary-600 flex items-center justify-center shrink-0">
-            <i className="ri-headphone-line text-lg" />
+      <div className="rounded-lg border border-background-200 bg-background-50 p-3 md:p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-full bg-secondary-100 text-secondary-600 flex items-center justify-center shrink-0">
+              <i className="ri-headphone-line text-lg" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground-900">Gọi thoại trong phòng</p>
+              <p className="text-xs text-foreground-500 break-words leading-snug">Bấm "Tham gia" để gọi cho nhau hát karaoke.</p>
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-foreground-900">Gọi thoại trong phòng</p>
-            <p className="text-xs text-foreground-500 break-words leading-snug">Bấm "Tham gia" để gọi cho nhau hát karaoke.</p>
-          </div>
+          <button
+            type="button"
+            onClick={onJoin}
+            disabled={isJoining}
+            className="shrink-0 px-4 py-2 rounded-md bg-secondary-500 text-white text-sm font-medium hover:bg-secondary-600 cursor-pointer whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isJoining ? (
+              <>
+                <i className="ri-loader-4-line animate-spin mr-1" />
+                Đang kết nối...
+              </>
+            ) : (
+              <>
+                <i className="ri-phone-line mr-1" />
+                Tham gia
+              </>
+            )}
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={onJoin}
-          className="shrink-0 px-4 py-2 rounded-md bg-secondary-500 text-white text-sm font-medium hover:bg-secondary-600 cursor-pointer whitespace-nowrap"
-        >
-          <i className="ri-phone-line mr-1" />
-          Tham gia
-        </button>
+        {error && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-red-500/10 text-red-600 text-xs">
+            <i className="ri-error-warning-line" />
+            <span>{error}</span>
+          </div>
+        )}
       </div>
     );
   }

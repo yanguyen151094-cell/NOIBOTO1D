@@ -86,17 +86,8 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
     }
   }, [roomId]);
 
-  // Auto join voice call khi vào phòng (sau khi auth load xong)
-  useEffect(() => {
-    if (!roomId || !currentUser?.id) return;
-    const timer = setTimeout(() => {
-      if (!voice.isActive) {
-        voice.join().catch(() => {});
-      }
-    }, 1500);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId, currentUser?.id]);
+  // Đã bỏ auto-join voice call để người dùng chủ động bấm "Tham gia",
+  // tránh xung đột khi nhiều mạng khác nhau và currentUser load chậm.
 
   useEffect(() => {
     queueRef.current = queue;
@@ -690,6 +681,7 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
         <div className="mt-3">
           <VoiceCallPanel
             isActive={voice.isActive}
+            isJoining={voice.isJoining}
             isMuted={voice.isMuted}
             localStream={voice.localStream}
             peers={voice.peers ?? {}}
