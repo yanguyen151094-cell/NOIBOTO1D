@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import type { KaraokeSongRequest } from "@/types";
 
@@ -6,9 +6,11 @@ export function useKaraokeRequests(roomId: string | null) {
   const [requests, setRequests] = useState<KaraokeSongRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const loadingRef = useRef(false);
 
   const load = useCallback(async () => {
-    if (!roomId) return;
+    if (!roomId || loadingRef.current) return;
+    loadingRef.current = true;
     setLoading(true);
     try {
       const { data, error: err } = await supabase
@@ -35,6 +37,7 @@ export function useKaraokeRequests(roomId: string | null) {
       setError(e instanceof Error ? e.message : "Lỗi tải yêu cầu.");
     } finally {
       setLoading(false);
+      loadingRef.current = false;
     }
   }, [roomId]);
 

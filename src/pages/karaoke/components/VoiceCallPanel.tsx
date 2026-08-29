@@ -41,6 +41,8 @@ export default function VoiceCallPanel({
   onToggleMute,
 }: VoiceCallPanelProps) {
   const allParticipants = Array.from(new Set([...participants, ...Object.keys(peers)]));
+  const connectedPeers = Object.keys(peers).filter((id) => peers[id]?.stream);
+  const pendingPeers = allParticipants.filter((id) => !peers[id]?.stream);
 
   if (!isActive) {
     return (
@@ -79,6 +81,7 @@ export default function VoiceCallPanel({
             </p>
             <p className="text-xs text-foreground-500 break-words leading-snug">
               {isMuted ? "Micro đang tắt tiếng" : "Micro đang bật"}
+              {pendingPeers.length > 0 && ` · ${pendingPeers.length} đang kết nối...`}
             </p>
           </div>
         </div>
@@ -122,12 +125,13 @@ export default function VoiceCallPanel({
           {isMuted && <i className="ri-mic-off-line text-red-500 ml-0.5" />}
         </div>
 
-        {allParticipants.map((peerId) => {
+        {/* Connected peers */}
+        {connectedPeers.map((peerId) => {
           const peer = peers[peerId];
           return (
             <div
               key={peerId}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-secondary-100 text-secondary-700 text-xs font-medium"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-medium"
             >
               <Avatar name={peer?.userName || "Thành viên"} size="sm" />
               <span className="truncate max-w-[100px] inline-block">{peer?.userName || "Thành viên"}</span>
@@ -137,6 +141,17 @@ export default function VoiceCallPanel({
             </div>
           );
         })}
+
+        {/* Pending peers (đang kết nối) */}
+        {pendingPeers.map((peerId) => (
+          <div
+            key={peerId}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-secondary-100 text-secondary-600 text-xs font-medium animate-pulse"
+          >
+            <Avatar name="Thành viên" size="sm" />
+            <span className="truncate max-w-[100px] inline-block">Đang kết nối...</span>
+          </div>
+        ))}
       </div>
 
       {/* Audio elements for remote streams */}

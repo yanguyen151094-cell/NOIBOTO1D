@@ -13,6 +13,8 @@ interface QueuePanelProps {
   onRequest: (url: string) => Promise<void>;
   onApprove: (requestId: string) => Promise<void>;
   onReject: (requestId: string) => Promise<void>;
+  onApproveAll?: (ids: string[]) => Promise<void>;
+  onRejectAll?: (ids: string[]) => Promise<void>;
 }
 
 export default function QueuePanel({
@@ -27,10 +29,14 @@ export default function QueuePanel({
   onRequest,
   onApprove,
   onReject,
+  onApproveAll,
+  onRejectAll,
 }: QueuePanelProps) {
   const [url, setUrl] = useState("");
   const [adding, setAdding] = useState(false);
   const [activeTab, setActiveTab] = useState<"queue" | "requests">("queue");
+  const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const handleAdd = async () => {
     const trimmed = url.trim();
@@ -48,8 +54,57 @@ export default function QueuePanel({
     }
   };
 
+  const handleApproveOne = async (id: string) => {
+    setProcessingIds((prev) => new Set(prev).add(id));
+    try {
+      await onApprove(id);
+    } finally {
+      setProcessingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  };
+
+  const handleRejectOne = async (id: string) => {
+    setProcessingIds((prev) => new Set(prev).add(id));
+    try {
+      await onReject(id);
+    } finally {
+      setProcessingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  };
+
+  const handleApproveAll = async () => {
+    if (!pendingRequests.length || !onApproveAll) return;
+    setBulkBusy(true);
+    try {
+      await onApproveAll(pendingRequests.map((r) => r.id));
+      setActiveTab("queue");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleRejectAll = async () => {
+    if (!pendingRequests.length || !onRejectAll) return;
+    setBulkBusy(true);
+    try {
+      await onRejectAll(pendingRequests.map((r) => r.id));
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   const playing = queue.find((s) => s.status === "playing");
   const pendingRequests = requests.filter((r) => r.status === "pending");
+  const approvedRequests = requests.filter((r) => r.status === "approved");
+  const rejectedRequests = requests.filter((r) => r.status === "rejected");
 
   return (
     <div className="flex flex-col h-full bg-background-50 rounded-lg border border-background-200 overflow-hidden">
@@ -110,7 +165,7 @@ export default function QueuePanel({
         >
           Yêu cầu ({pendingRequests.length})
           {pendingRequests.length > 0 && (
-            <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-accent-500 text-white text-[10px] flex items-center justify-center">
+            <span className="absolute top-1 right-2 w-4 h-4 rounded-full bg-accent-500 text-white text-[10px] flex items-center justify-center">
               {pendingRequests.length}
             </span>
           )}
@@ -187,8 +242,33 @@ export default function QueuePanel({
           )
         ) : (
           <div className="space-y-2">
+            {/* Admin bulk actions */}
+            {isAdmin && pendingRequests.length > 0 && (
+              <div className="flex gap-2 px-2 py-2 border-b border-background-200">
+                <button
+                  type="button"
+                  onClick={handleApproveAll}
+                  disabled={bulkBusy}
+                  className="flex-1 px-3 py-1.5 rounded-md bg-emerald-500 text-white text-xs font-medium hover:bg-emerald-600 disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                >
+                  <i className="ri-check-double-line mr-1" />
+                  Chấp nhận tất cả
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRejectAll}
+                  disabled={bulkBusy}
+                  className="px-3 py-1.5 rounded-md bg-red-100 text-red-600 text-xs font-medium hover:bg-red-200 disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                >
+                  <i className="ri-close-circle-line mr-1" />
+                  Từ chối tất cả
+                </button>
+              </div>
+            )}
+
+            {/* Pending requests */}
             {pendingRequests.length === 0 ? (
-              <div className="text-center py-10 px-4">
+              <div className="text-center py-8 px-4">
                 <div className="w-12 h-12 rounded-full bg-background-100 flex items-center justify-center mx-auto">
                   <i className="ri-time-line text-xl text-foreground-400" />
                 </div>
@@ -198,53 +278,104 @@ export default function QueuePanel({
                 </p>
               </div>
             ) : (
-              pendingRequests.map((req) => (
-                <div
-                  key={req.id}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg border bg-background-50 border-background-200"
-                >
-                  {req.thumbnail && (
-                    <img
-                      src={req.thumbnail}
-                      alt=""
-                      className="w-12 h-9 rounded object-cover shrink-0"
-                    />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-foreground-900 break-words leading-snug line-clamp-2">
-                      {req.title}
-                    </p>
-                    <p className="text-[11px] text-foreground-500">
-                      Yêu cầu bởi {req.requestedByName}
-                    </p>
-                  </div>
-                  {isAdmin && (
-                    <div className="flex gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => onApprove(req.id)}
-                        disabled={busy}
-                        className="w-7 h-7 rounded-md flex items-center justify-center bg-emerald-100 text-emerald-600 hover:bg-emerald-200 cursor-pointer"
-                        title="Duyệt"
-                      >
-                        <i className="ri-check-line" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onReject(req.id)}
-                        disabled={busy}
-                        className="w-7 h-7 rounded-md flex items-center justify-center bg-red-100 text-red-600 hover:bg-red-200 cursor-pointer"
-                        title="Từ chối"
-                      >
-                        <i className="ri-close-line" />
-                      </button>
+              pendingRequests.map((req) => {
+                const isProcessing = processingIds.has(req.id) || bulkBusy;
+                return (
+                  <div
+                    key={req.id}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg border bg-background-50 border-background-200"
+                  >
+                    {req.thumbnail && (
+                      <img
+                        src={req.thumbnail}
+                        alt=""
+                        className="w-12 h-9 rounded object-cover shrink-0"
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-foreground-900 break-words leading-snug line-clamp-2">
+                        {req.title}
+                      </p>
+                      <p className="text-[11px] text-foreground-500">
+                        Yêu cầu bởi {req.requestedByName}
+                      </p>
                     </div>
-                  )}
-                  {!isAdmin && req.requestedBy === currentUserId && (
-                    <span className="text-[10px] text-foreground-400 whitespace-nowrap">Đang chờ duyệt</span>
-                  )}
-                </div>
-              ))
+                    {isAdmin ? (
+                      <div className="flex gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleApproveOne(req.id)}
+                          disabled={isProcessing}
+                          className="px-2.5 py-1 rounded-md bg-emerald-500 text-white text-xs font-medium hover:bg-emerald-600 disabled:opacity-50 cursor-pointer whitespace-nowrap flex items-center gap-1"
+                          title="Chấp nhận và thêm vào hàng chờ"
+                        >
+                          <i className="ri-check-line" />
+                          Chấp nhận
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRejectOne(req.id)}
+                          disabled={isProcessing}
+                          className="w-7 h-7 rounded-md flex items-center justify-center bg-red-100 text-red-600 hover:bg-red-200 disabled:opacity-50 cursor-pointer"
+                          title="Từ chối"
+                        >
+                          <i className="ri-close-line" />
+                        </button>
+                      </div>
+                    ) : (
+                      req.requestedBy === currentUserId && (
+                        <span className="text-[10px] text-foreground-400 whitespace-nowrap">Đang chờ duyệt</span>
+                      )
+                    )}
+                  </div>
+                );
+              })
+            )}
+
+            {/* Approved requests (recent) */}
+            {approvedRequests.length > 0 && (
+              <div className="pt-2 border-t border-background-200">
+                <p className="px-2 text-[10px] font-medium text-emerald-600 uppercase tracking-wider mb-1">
+                  Đã chấp nhận ({approvedRequests.length})
+                </p>
+                {approvedRequests.slice(0, 5).map((req) => (
+                  <div
+                    key={req.id}
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg border border-emerald-200/60 bg-emerald-50/40 opacity-80"
+                  >
+                    {req.thumbnail && (
+                      <img src={req.thumbnail} alt="" className="w-10 h-7 rounded object-cover shrink-0 opacity-70" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-foreground-700 line-clamp-1">{req.title}</p>
+                      <p className="text-[10px] text-emerald-600">Đã thêm vào hàng chờ</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Rejected requests (recent) */}
+            {rejectedRequests.length > 0 && (
+              <div className="pt-2 border-t border-background-200">
+                <p className="px-2 text-[10px] font-medium text-red-500 uppercase tracking-wider mb-1">
+                  Đã từ chối ({rejectedRequests.length})
+                </p>
+                {rejectedRequests.slice(0, 3).map((req) => (
+                  <div
+                    key={req.id}
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg border border-red-200/60 bg-red-50/40 opacity-60"
+                  >
+                    {req.thumbnail && (
+                      <img src={req.thumbnail} alt="" className="w-10 h-7 rounded object-cover shrink-0 opacity-50" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-foreground-600 line-clamp-1 line-through">{req.title}</p>
+                      <p className="text-[10px] text-red-500">Đã từ chối</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}

@@ -86,6 +86,18 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
     }
   }, [roomId]);
 
+  // Auto join voice call khi vào phòng (sau khi auth load xong)
+  useEffect(() => {
+    if (!roomId || !currentUser?.id) return;
+    const timer = setTimeout(() => {
+      if (!voice.isActive) {
+        voice.join().catch(() => {});
+      }
+    }, 1500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId, currentUser?.id]);
+
   useEffect(() => {
     queueRef.current = queue;
   }, [queue]);
@@ -432,7 +444,7 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
     setBusy(true);
     try {
       await approveSongRequest(requestId, roomId);
-      notify("Đã duyệt yêu cầu bài hát.");
+      notify("Đã chấp nhận yêu cầu bài hát.");
       reloadRequests();
     } catch (e) {
       notify(e instanceof Error ? e.message : "Duyệt thất bại.");
@@ -449,6 +461,58 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
       reloadRequests();
     } catch (e) {
       notify(e instanceof Error ? e.message : "Từ chối thất bại.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleApproveAll = async (ids: string[]) => {
+    if (!ids.length) return;
+    setBusy(true);
+    let success = 0;
+    let failed = 0;
+    try {
+      for (const id of ids) {
+        try {
+          await approveSongRequest(id, roomId);
+          success++;
+        } catch {
+          failed++;
+        }
+      }
+      if (success > 0) {
+        notify(`Đã chấp nhận ${success} yêu cầu.`);
+      }
+      if (failed > 0) {
+        notify(`${failed} yêu cầu lỗi, thử lại sau.`);
+      }
+      reloadRequests();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRejectAll = async (ids: string[]) => {
+    if (!ids.length) return;
+    setBusy(true);
+    let success = 0;
+    let failed = 0;
+    try {
+      for (const id of ids) {
+        try {
+          await rejectSongRequest(id);
+          success++;
+        } catch {
+          failed++;
+        }
+      }
+      if (success > 0) {
+        notify(`Đã từ chối ${success} yêu cầu.`);
+      }
+      if (failed > 0) {
+        notify(`${failed} yêu cầu lỗi, thử lại sau.`);
+      }
+      reloadRequests();
     } finally {
       setBusy(false);
     }
@@ -646,6 +710,8 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
               onRequest={handleRequest}
               onApprove={handleApproveRequest}
               onReject={handleRejectRequest}
+              onApproveAll={isAdmin ? handleApproveAll : undefined}
+              onRejectAll={isAdmin ? handleRejectAll : undefined}
             />
           </div>
           <div className="h-80">
