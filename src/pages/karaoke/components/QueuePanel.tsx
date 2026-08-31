@@ -227,6 +227,15 @@ export default function QueuePanel({
                       {song.addedByName ? ` · ${song.addedByName}` : ""}
                     </p>
                   </div>
+                  <a
+                    href={`https://www.youtube.com/watch?v=${song.videoId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-7 h-7 rounded-md flex items-center justify-center text-foreground-400 hover:bg-red-500/10 hover:text-red-500 cursor-pointer shrink-0"
+                    title="Xem trên YouTube"
+                  >
+                    <i className="ri-youtube-line" />
+                  </a>
                   <button
                     type="button"
                     onClick={() => onRemove(song.id)}

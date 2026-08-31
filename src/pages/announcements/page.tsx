@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import Avatar from "@/components/base/Avatar";
 import Modal from "@/components/base/Modal";
 import { useAuth } from "@/context/AuthContext";
@@ -8,6 +8,7 @@ import {
   createAnnouncement,
   deleteAnnouncement,
   toggleLikeAnnouncement,
+  uploadImage,
 } from "@/lib/actions";
 import { mapAnnouncement } from "@/lib/mappers";
 import { formatRelative } from "@/utils/ui";
@@ -37,6 +38,9 @@ export default function Announcements() {
   const [composeOpen, setComposeOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState("");
+  const [uploading, setUploading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Announcement | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
@@ -92,20 +96,41 @@ export default function Announcements() {
     };
   }, [reload]);
 
+  const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      notify("Ảnh quá lớn (tối đa 5MB).");
+      return;
+    }
+    setImageFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => setImagePreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
   const handleCreate = async () => {
     if (!title.trim() || !content.trim()) return;
     setBusy(true);
+    setUploading(true);
     try {
-      await createAnnouncement(title.trim(), content.trim());
+      let imageUrl: string | undefined;
+      if (imageFile) {
+        imageUrl = await uploadImage(imageFile, "announcements");
+      }
+      await createAnnouncement(title.trim(), content.trim(), imageUrl);
       notify("Đã đăng thông báo.");
       setTitle("");
       setContent("");
+      setImageFile(null);
+      setImagePreview("");
       setComposeOpen(false);
       reload();
     } catch (e) {
       notify(e instanceof Error ? e.message : "Đăng thông báo thất bại.");
     } finally {
       setBusy(false);
+      setUploading(false);
     }
   };
 
@@ -213,6 +238,15 @@ export default function Announcements() {
                 <p className="mt-1.5 text-sm text-foreground-700 leading-relaxed whitespace-pre-line">
                   {a.content}
                 </p>
+                {a.imageUrl && (
+                  <div className="mt-3">
+                    <img
+                      src={a.imageUrl}
+                      alt={a.title}
+                      className="max-h-72 w-full rounded-lg border border-background-200 object-contain bg-background-100"
+                    />
+                  </div>
+                )}
 
                 <div className="mt-4 pt-3 border-t border-background-100 flex items-center gap-1">
                   <button
@@ -253,7 +287,7 @@ export default function Announcements() {
                 onClick={handleCreate}
                 className="px-4 py-2 rounded-md bg-primary-500 text-white text-sm font-medium disabled:opacity-50 cursor-pointer whitespace-nowrap"
               >
-                {busy ? "Đang đăng..." : "Đăng thông báo"}
+                {busy || uploading ? "Đang đăng..." : "Đăng thông báo"}
               </button>
             </>
           }
@@ -279,6 +313,30 @@ export default function Announcements() {
                 placeholder="Nhập nội dung thông báo..."
                 className="w-full px-3 py-2.5 rounded-md border border-background-300 bg-background-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none"
               />
+            </div>
+            <div>
+              <label className="block text-sm text-foreground-700 mb-1.5">Hình ảnh đính kèm</label>
+              <div className="flex items-center gap-3">
+                <label className="px-3 py-2 rounded-md border border-background-300 bg-background-50 text-sm text-foreground-700 cursor-pointer hover:bg-background-100 whitespace-nowrap">
+                  <i className="ri-image-line mr-1" />
+                  Chọn ảnh
+                  <input type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
+                </label>
+                {imagePreview && (
+                  <div className="relative">
+                    <img src={imagePreview} alt="Preview" className="h-14 w-14 rounded-md object-cover border border-background-200" />
+                    <button
+                      type="button"
+                      onClick={() => { setImageFile(null); setImagePreview(""); }}
+                      className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center cursor-pointer"
+                      title="Bỏ ảnh"
+                    >
+                      <i className="ri-close-line" />
+                    </button>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-foreground-400 mt-1">Tối đa 5MB, định dạng ảnh.</p>
             </div>
           </div>
         </Modal>

@@ -568,6 +568,7 @@ export interface RewardInput {
   recipientName: string;
   rewardContent: string;
   amount: number;
+  staffId?: string;
 }
 
 export async function createReward(input: RewardInput): Promise<void> {
@@ -581,8 +582,22 @@ export async function createReward(input: RewardInput): Promise<void> {
     reward_content: input.rewardContent,
     amount: input.amount,
     created_by: userId,
+    staff_id: input.staffId ?? null,
   });
   if (error) throw error;
+
+  if (input.staffId) {
+    const amountStr = input.amount.toLocaleString("vi-VN");
+    const { error: ntfError } = await supabase.from("notifications").insert({
+      user_id: input.staffId,
+      type: "reward",
+      title: "Chúc mừng bạn nhận thưởng! 🎉",
+      content: `${input.workName} — ${amountStr}đ`,
+      is_read: false,
+      created_at: new Date().toISOString(),
+    });
+    if (ntfError) console.warn("Không thể tạo thông báo thưởng:", ntfError.message);
+  }
 }
 
 export async function updateReward(id: string, input: RewardInput): Promise<void> {
@@ -790,11 +805,17 @@ export async function uploadImage(file: File, folder: string): Promise<string> {
   return data.publicUrl;
 }
 
-export async function sendKaraokeMessage(roomId: string, content: string): Promise<void> {
+export async function sendKaraokeMessage(roomId: string, content: string, imageUrl?: string): Promise<void> {
   const userId = await requireUserId();
   const { error } = await supabase
     .from("karaoke_messages")
-    .insert({ room_id: roomId, sender_id: userId, content, sent_at: new Date().toISOString() });
+    .insert({
+      room_id: roomId,
+      sender_id: userId,
+      content,
+      image_url: imageUrl ?? null,
+      sent_at: new Date().toISOString(),
+    });
   if (error) throw error;
 }
 
@@ -968,6 +989,17 @@ export async function createStaffPunishment(input: StaffPunishmentInput): Promis
     created_by: userId,
   });
   if (error) throw error;
+
+  const amountStr = input.amount > 0 ? ` — ${input.amount.toLocaleString("vi-VN")}đ` : "";
+  const { error: ntfError } = await supabase.from("notifications").insert({
+    user_id: input.staffId,
+    type: "punishment",
+    title: "Bạn có thông báo phạt",
+    content: `${input.reason}${amountStr}`,
+    is_read: false,
+    created_at: new Date().toISOString(),
+  });
+  if (ntfError) console.warn("Không thể tạo thông báo phạt:", ntfError.message);
 }
 
 export async function deleteStaffPunishment(id: string): Promise<void> {

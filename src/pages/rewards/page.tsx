@@ -43,6 +43,7 @@ export default function Rewards() {
   const [recipientName, setRecipientName] = useState("");
   const [rewardContent, setRewardContent] = useState("");
   const [amount, setAmount] = useState("");
+  const [staffId, setStaffId] = useState("");
 
   const [search, setSearch] = useState("");
   const [filterMonth, setFilterMonth] = useState("");
@@ -112,6 +113,17 @@ export default function Rewards() {
     [filtered]
   );
 
+  const { data: staffList } = useQuery<{ id: string; name: string }[]>(async () => {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, name")
+      .eq("role", "staff")
+      .eq("active", true)
+      .order("name");
+    if (error) throw error;
+    return (data ?? []) as { id: string; name: string }[];
+  });
+
   const openCreate = () => {
     setEditing(null);
     setDate(new Date().toISOString().split("T")[0]);
@@ -121,6 +133,7 @@ export default function Rewards() {
     setRecipientName("");
     setRewardContent("");
     setAmount("");
+    setStaffId("");
     setComposeOpen(true);
   };
 
@@ -133,6 +146,7 @@ export default function Rewards() {
     setRecipientName(r.recipientName);
     setRewardContent(r.rewardContent);
     setAmount(String(r.amount));
+    setStaffId(r.staffId ?? "");
     setComposeOpen(true);
   };
 
@@ -148,6 +162,7 @@ export default function Rewards() {
         recipientName: recipientName.trim(),
         rewardContent: rewardContent.trim(),
         amount: Number(amount.replace(/[^0-9]/g, "")) || 0,
+        staffId: staffId || undefined,
       };
       if (editing) {
         await updateReward(editing.id, payload);
@@ -516,6 +531,28 @@ export default function Rewards() {
                 placeholder="Ví dụ: Chăm sóc khách VIP tháng 8"
                 className="w-full px-3 py-2.5 rounded-md border border-background-300 bg-background-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
               />
+            </div>
+            <div>
+              <label className="block text-sm text-foreground-700 mb-1.5">
+                Nhân viên nhận thưởng <span className="text-foreground-400">(để gửi thông báo chúc mừng 🎉)</span>
+              </label>
+              <select
+                value={staffId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setStaffId(id);
+                  const s = (staffList ?? []).find((x) => x.id === id);
+                  if (s && !recipientName.trim()) setRecipientName(s.name);
+                }}
+                className="w-full px-3 py-2.5 rounded-md border border-background-300 bg-background-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 cursor-pointer"
+              >
+                <option value="">Chọn nhân viên...</option>
+                {(staffList ?? []).map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>

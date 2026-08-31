@@ -180,6 +180,7 @@ export interface KaraokeMessage {
   senderId: string;
   senderName: string;
   content: string;
+  imageUrl?: string;
   sentAt: string;
 }
 
@@ -326,6 +327,7 @@ export interface Reward {
   recipientName: string;
   rewardContent: string;
   amount: number;
+  staffId?: string;
   createdAt: string;
 }
 

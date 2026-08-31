@@ -4,6 +4,7 @@ import Avatar from "@/components/base/Avatar";
 interface VoicePeer {
   stream: MediaStream | null;
   userName: string;
+  isMuted?: boolean;
 }
 
 interface VoiceCallPanelProps {

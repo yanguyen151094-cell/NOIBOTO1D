@@ -313,6 +313,7 @@ export function mapReward(row: Record<string, unknown>): Reward {
     recipientName: (row.recipient_name as string) ?? "",
     rewardContent: (row.reward_content as string) ?? "",
     amount: Number(row.amount ?? 0),
+    staffId: (row.staff_id as string) ?? undefined,
     createdAt: (row.created_at as string) ?? "",
   };
 }
@@ -356,6 +357,7 @@ export function mapKaraokeMessage(row: Record<string, unknown>): KaraokeMessage 
     senderId: row.sender_id as string,
     senderName: (row.sender_name as string) ?? "",
     content: (row.content as string) ?? "",
+    imageUrl: (row.image_url as string) ?? undefined,
     sentAt: row.sent_at as string,
   };
 }

@@ -526,9 +526,9 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
     }
   };
 
-  const handleSend = async (content: string) => {
+  const handleSend = async (content: string, imageUrl?: string) => {
     try {
-      await sendKaraokeMessage(roomId, content);
+      await sendKaraokeMessage(roomId, content, imageUrl);
     } catch {
       notify("Gửi tin nhắn thất bại.");
     }

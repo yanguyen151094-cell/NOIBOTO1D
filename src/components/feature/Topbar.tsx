@@ -203,8 +203,28 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
                         n.isRead ? "bg-background-50" : "bg-accent-100/50"
                       }`}
                     >
-                      <div className="w-8 h-8 rounded-full bg-accent-100 text-accent-700 flex items-center justify-center shrink-0 mt-0.5">
-                        <i className="ri-star-fill" />
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                          n.type === "reward"
+                            ? "bg-emerald-100 text-emerald-600"
+                            : n.type === "punishment"
+                              ? "bg-red-100 text-red-600"
+                              : n.type === "evaluation"
+                                ? "bg-amber-100 text-amber-700"
+                                : "bg-accent-100 text-accent-700"
+                        }`}
+                      >
+                        <i
+                          className={
+                            n.type === "reward"
+                              ? "ri-gift-2-line"
+                              : n.type === "punishment"
+                                ? "ri-alarm-warning-line"
+                                : n.type === "evaluation"
+                                  ? "ri-star-fill"
+                                  : "ri-notification-3-line"
+                          }
+                        />
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-foreground-900">{n.title}</p>
