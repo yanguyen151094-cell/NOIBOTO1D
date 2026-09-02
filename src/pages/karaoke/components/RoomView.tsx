@@ -55,6 +55,8 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
   const isAdmin = currentUser?.role === "admin";
   const { room, queue, messages, loading, error, reload } = useKaraokeRoom(roomId);
   const { requests, reload: reloadRequests } = useKaraokeRequests(roomId);
+  // Chủ phòng = người tạo phòng karaoke (Tổ Trưởng). Chủ phòng thoát thì mọi người tự thoát.
+  const isHost = !!currentUser?.id && !!room?.createdBy && currentUser.id === room.createdBy;
 
   const playerRef = useRef<YoutubePlayerHandle>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -76,7 +78,8 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
   const voice = useVoiceCall(
     roomId,
     currentUser?.id ?? "",
-    currentUser?.name ?? "Thành viên"
+    currentUser?.name ?? "Thành viên",
+    isHost
   );
 
   // Auto join phòng khi vào
@@ -687,6 +690,7 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
             peers={voice.peers ?? {}}
             participants={voice.participants}
             error={voice.error}
+            hostEnded={voice.hostEnded}
             onJoin={voice.join}
             onLeave={voice.leave}
             onToggleMute={voice.toggleMute}

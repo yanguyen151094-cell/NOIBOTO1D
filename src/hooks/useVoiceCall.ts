@@ -15,6 +15,7 @@ export interface VoiceCallReturn {
   peers: Record<string, VoicePeerState>;
   participants: string[];
   error: string | null;
+  hostEnded: boolean;
   join: () => Promise<void>;
   leave: () => void;
   toggleMute: () => void;
@@ -32,14 +33,33 @@ interface SignalPayload {
 interface PresenceItem {
   userId?: string;
   name?: string;
+  isHost?: boolean;
 }
 
-// STUN công cộng của Google - hoàn toàn miễn phí, không cần tài khoản.
+// STUN công cộng của Google + TURN miễn phí OpenRelay.
+// TURN giúp các thành viên khác mạng (NAT khó) vẫn kết nối được với nhau,
+// tránh tình trạng "nghe được người này, không nghe được người kia".
 const RTC_CONFIG = {
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+  iceServers: [
+    { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
+    {
+      urls: [
+        "turn:openrelay.metered.ca:80",
+        "turn:openrelay.metered.ca:443",
+        "turn:openrelay.metered.ca:443?transport=tcp",
+      ],
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
+  ],
 };
 
-export function useVoiceCall(roomId: string, userId: string, userName: string): VoiceCallReturn {
+export function useVoiceCall(
+  roomId: string,
+  userId: string,
+  userName: string,
+  isHost: boolean
+): VoiceCallReturn {
   const [isActive, setIsActive] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -47,16 +67,19 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
   const [peers, setPeers] = useState<Record<string, VoicePeerState>>({});
   const [participants, setParticipants] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [hostEnded, setHostEnded] = useState(false);
 
   const pcMapRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const remoteStreamMapRef = useRef<Map<string, MediaStream>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const namesRef = useRef<Record<string, string>>({});
+  const hostSeenRef = useRef(false);
 
   const userIdRef = useRef(userId);
   const userNameRef = useRef(userName);
   const roomIdRef = useRef(roomId);
+  const isHostRef = useRef(isHost);
   const joiningRef = useRef(false);
   const activeRef = useRef(false);
 
@@ -69,6 +92,9 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
   useEffect(() => {
     roomIdRef.current = roomId;
   }, [roomId]);
+  useEffect(() => {
+    isHostRef.current = isHost;
+  }, [isHost]);
   useEffect(() => {
     activeRef.current = isActive;
   }, [isActive]);
@@ -151,7 +177,9 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
       };
 
       if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach((t) => pc.addTrack(t, localStreamRef.current as MediaStream));
+        localStreamRef.current
+          .getTracks()
+          .forEach((t) => pc.addTrack(t, localStreamRef.current as MediaStream));
       }
 
       return pc;
@@ -190,7 +218,6 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
 
       if (payload.type === "offer") {
         let pc = pcMapRef.current.get(from);
-        // Nếu đã có kết nối cũng không ổn định, đóng và tạo lại
         if (pc && pc.connectionState !== "connected" && pc.connectionState !== "connecting") {
           closePeer(from);
           pc = undefined;
@@ -233,19 +260,74 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
     [createPeerConnection, broadcast, closePeer]
   );
 
+  // Dọn dẹp toàn bộ trạng thái (dùng chung cho leave và auto-leave)
+  const cleanup = useCallback(() => {
+    localStreamRef.current?.getTracks().forEach((t) => t.stop());
+    localStreamRef.current = null;
+    setLocalStream(null);
+
+    pcMapRef.current.forEach((pc) => {
+      try {
+        pc.close();
+      } catch {
+        // ignore
+      }
+    });
+    pcMapRef.current.clear();
+    remoteStreamMapRef.current.clear();
+    namesRef.current = {};
+
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
+    setPeers({});
+    setParticipants([]);
+    setIsActive(false);
+    setIsJoining(false);
+    joiningRef.current = false;
+    setIsMuted(false);
+    hostSeenRef.current = false;
+  }, []);
+
+  const leave = useCallback(() => {
+    cleanup();
+    setError(null);
+  }, [cleanup]);
+
+  const leaveRef = useRef(leave);
+  useEffect(() => {
+    leaveRef.current = leave;
+  });
+
   const ensureConnections = useCallback(() => {
     const channel = channelRef.current;
     if (!channel) return;
     const state = channel.presenceState<Record<string, PresenceItem>>();
+
+    let hostOnline = false;
     const online = new Set<string>();
     Object.values(state).forEach((presences) => {
       (presences as unknown as PresenceItem[]).forEach((p) => {
+        if (p.isHost) hostOnline = true;
         if (p.userId && p.userId !== userIdRef.current) {
           online.add(p.userId);
           if (p.name) namesRef.current[p.userId] = p.name;
         }
       });
     });
+
+    // Chủ phòng (Tổ Trưởng) thoát → mọi người tự thoát theo
+    if (!isHostRef.current) {
+      if (hostOnline) {
+        hostSeenRef.current = true;
+      } else if (hostSeenRef.current) {
+        setHostEnded(true);
+        leaveRef.current();
+        return;
+      }
+    }
 
     // Đóng kết nối với người đã rời phòng
     pcMapRef.current.forEach((_pc, peerId) => {
@@ -278,6 +360,7 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
     }
     try {
       setError(null);
+      setHostEnded(false);
       setIsJoining(true);
       joiningRef.current = true;
 
@@ -310,13 +393,18 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
 
       channel
         .on("presence", { event: "sync" }, () => ensureConnections())
+        .on("presence", { event: "join" }, () => ensureConnections())
         .on("presence", { event: "leave" }, () => ensureConnections())
         .on("broadcast", { event: "voice-signal" }, ({ payload }) => {
           handleSignal(payload as SignalPayload);
         })
         .subscribe((status) => {
           if (status === "SUBSCRIBED") {
-            channel.track({ userId: userIdRef.current, name: userNameRef.current });
+            channel.track({
+              userId: userIdRef.current,
+              name: userNameRef.current,
+              isHost: isHostRef.current,
+            });
           }
         });
 
@@ -348,36 +436,6 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
       setLocalStream(null);
     }
   }, [ensureConnections, handleSignal]);
-
-  const leave = useCallback(() => {
-    localStreamRef.current?.getTracks().forEach((t) => t.stop());
-    localStreamRef.current = null;
-    setLocalStream(null);
-
-    pcMapRef.current.forEach((pc) => {
-      try {
-        pc.close();
-      } catch {
-        // ignore
-      }
-    });
-    pcMapRef.current.clear();
-    remoteStreamMapRef.current.clear();
-    namesRef.current = {};
-
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
-      channelRef.current = null;
-    }
-
-    setPeers({});
-    setParticipants([]);
-    setIsActive(false);
-    setIsJoining(false);
-    joiningRef.current = false;
-    setIsMuted(false);
-    setError(null);
-  }, []);
 
   const toggleMute = useCallback(() => {
     const next = !isMuted;
@@ -421,6 +479,7 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
     peers,
     participants,
     error,
+    hostEnded,
     join,
     leave,
     toggleMute,

@@ -15,6 +15,7 @@ interface VoiceCallPanelProps {
   peers: Record<string, VoicePeer>;
   participants: string[];
   error: string | null;
+  hostEnded: boolean;
   onJoin: () => void;
   onLeave: () => void;
   onToggleMute: () => void;
@@ -39,6 +40,7 @@ export default function VoiceCallPanel({
   peers,
   participants,
   error,
+  hostEnded,
   onJoin,
   onLeave,
   onToggleMute,
@@ -57,7 +59,11 @@ export default function VoiceCallPanel({
             </div>
             <div className="min-w-0">
               <p className="text-sm font-semibold text-foreground-900">Gọi thoại trong phòng</p>
-              <p className="text-xs text-foreground-500 break-words leading-snug">Bấm "Tham gia" để gọi cho nhau hát karaoke.</p>
+              <p className="text-xs text-foreground-500 break-words leading-snug">
+                {hostEnded
+                  ? "Tổ Trưởng đã kết thúc cuộc gọi."
+                  : 'Bấm "Tham gia" để gọi cho nhau hát karaoke.'}
+              </p>
             </div>
           </div>
           <button
@@ -79,6 +85,12 @@ export default function VoiceCallPanel({
             )}
           </button>
         </div>
+        {hostEnded && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-amber-500/10 text-amber-600 text-xs">
+            <i className="ri-information-line" />
+            <span>Cuộc gọi đã kết thúc. Bấm "Tham gia" để bắt đầu lại khi Tổ Trưởng đã vào phòng.</span>
+          </div>
+        )}
         {error && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-red-500/10 text-red-600 text-xs">
             <i className="ri-error-warning-line" />
