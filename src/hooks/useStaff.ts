@@ -40,7 +40,7 @@ export function useStaff(): StaffData {
     setError("");
     try {
       const [profRes, accessRes, chRes, convRes, msgRes, rteRes] = await Promise.all([
-        supabase.from("profiles").select("*").eq("role", "staff").order("name"),
+        supabase.from("profiles").select("*").in("role", ["staff", "admin"]).order("name"),
         supabase.from("channel_access").select("user_id, channel_id"),
         supabase.from("channels").select("*").order("name"),
         supabase.from("conversations").select("assigned_staff_id"),

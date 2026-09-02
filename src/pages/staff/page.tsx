@@ -225,6 +225,12 @@ export default function Staff() {
                             <span className={`w-1.5 h-1.5 rounded-full ${presence.dot}`} />
                             {s.active ? "Hoạt động" : "Đã khóa"}
                           </span>
+                          {s.role === "admin" && (
+                            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                              <i className="ri-shield-star-line text-[10px]" />
+                              Admin
+                            </span>
+                          )}
                           <p className="text-[11px] text-foreground-400">
                             {presence.label}
                             {s.lastActive ? ` · ${formatDateTime(s.lastActive)}` : ""}
@@ -299,7 +305,15 @@ export default function Staff() {
                   <div className="flex items-center gap-3">
                     <Avatar name={s.name} size="md" online={s.presence === "online"} />
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-foreground-900 truncate">{s.name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-foreground-900 truncate">{s.name}</p>
+                        {s.role === "admin" && (
+                          <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 shrink-0">
+                            <i className="ri-shield-star-line" />
+                            Admin
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-foreground-400">@{s.username}</p>
                     </div>
                     <span className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full shrink-0 ${s.active ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
