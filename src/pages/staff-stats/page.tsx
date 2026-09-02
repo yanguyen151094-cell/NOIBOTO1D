@@ -3,7 +3,8 @@ import { useAuth } from "@/context/AuthContext";
 import { useQuery } from "@/hooks/useQuery";
 import { supabase } from "@/lib/supabase";
 import { mapStaffDailyStat } from "@/lib/mappers";
-import { upsertStaffDailyStat } from "@/lib/actions";
+import { upsertStaffDailyStat, updateStaffDailyStat, deleteStaffDailyStat } from "@/lib/actions";
+import Modal from "@/components/base/Modal";
 import type { StaffDailyStat } from "@/types";
 import {
   BarChart,
@@ -39,6 +40,8 @@ export default function StaffStats() {
   const [staffFilter, setStaffFilter] = useState<string>("all");
   const [toast, setToast] = useState("");
   const [busy, setBusy] = useState(false);
+  const [editTarget, setEditTarget] = useState<StaffDailyStat | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<StaffDailyStat | null>(null);
 
   const notify = (msg: string) => {
     setToast(msg);
@@ -69,9 +72,7 @@ export default function StaffStats() {
       .lte("date", end)
       .order("date", { ascending: true });
 
-    if (!isAdmin && currentUser) {
-      query = query.eq("staff_id", currentUser.id);
-    } else if (staffFilter !== "all") {
+    if (staffFilter !== "all" && isAdmin) {
       query = query.eq("staff_id", staffFilter);
     }
 
@@ -91,6 +92,15 @@ export default function StaffStats() {
     return stats.filter((s) => s.staffId === staffFilter);
   }, [stats, staffFilter, isAdmin]);
 
+  const ownStats = useMemo(() => {
+    if (!stats || !currentUser) return [];
+    return stats.filter((s) => s.staffId === currentUser.id);
+  }, [stats, currentUser]);
+
+  const chartStats = useMemo(() => {
+    return isAdmin ? filteredStats : ownStats;
+  }, [isAdmin, filteredStats, ownStats]);
+
   const chartData = useMemo(() => {
     const days = getDaysInMonth(Number(month.split("-")[0]), Number(month.split("-")[1]));
     const map = new Map<string, { newCustomers: number; totalDeposits: number; totalBets: number }>();
@@ -98,7 +108,7 @@ export default function StaffStats() {
       const d = `${month}-${String(i).padStart(2, "0")}`;
       map.set(d, { newCustomers: 0, totalDeposits: 0, totalBets: 0 });
     }
-    for (const s of filteredStats) {
+    for (const s of chartStats) {
       const ex = map.get(s.date);
       if (ex) {
         ex.newCustomers += s.newCustomers;
@@ -113,10 +123,10 @@ export default function StaffStats() {
       "Tổng nạp": vals.totalDeposits,
       "Tổng cược": vals.totalBets,
     }));
-  }, [filteredStats, month]);
+  }, [chartStats, month]);
 
   const individualChartData = useMemo(() => {
-    if (!isAdmin || staffFilter !== "all" || !stats) return [];
+    if (staffFilter !== "all" || !stats) return [];
     const staffMap = new Map<string, { name: string; data: { day: string; newCustomers: number; totalDeposits: number; totalBets: number }[] }>();
     const days = getDaysInMonth(Number(month.split("-")[0]), Number(month.split("-")[1]));
 
@@ -160,10 +170,10 @@ export default function StaffStats() {
       }), { newCustomers: 0, totalDeposits: 0, totalBets: 0 });
       return { id, name: info.name, data, totals };
     });
-  }, [stats, staffFilter, isAdmin, month]);
+  }, [stats, staffFilter, month]);
 
   const totals = useMemo(() => {
-    return filteredStats.reduce(
+    return chartStats.reduce(
       (acc, s) => {
         acc.newCustomers += s.newCustomers;
         acc.totalDeposits += s.totalDeposits;
@@ -172,7 +182,7 @@ export default function StaffStats() {
       },
       { newCustomers: 0, totalDeposits: 0, totalBets: 0 }
     );
-  }, [filteredStats]);
+  }, [chartStats]);
 
   return (
     <div className="h-full overflow-y-auto cs-scroll p-4 md:p-6 animate-fade-in">
@@ -186,7 +196,7 @@ export default function StaffStats() {
       </div>
 
       {!isAdmin && currentUser && (
-        <StaffInputForm userId={currentUser.id} userName={currentUser.name} onNotify={notify} />
+        <StaffInputForm userId={currentUser.id} userName={currentUser.name} onNotify={notify} onReload={reload} />
       )}
 
       {isAdmin && (
@@ -314,12 +324,13 @@ export default function StaffStats() {
                     <th className="px-4 py-3 font-semibold text-right">Khách mới</th>
                     <th className="px-4 py-3 font-semibold text-right">Tổng nạp</th>
                     <th className="px-4 py-3 font-semibold text-right">Tổng cược</th>
+                    <th className="px-4 py-3 font-semibold text-center">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredStats.length === 0 ? (
                     <tr>
-                      <td colSpan={isAdmin ? 5 : 4} className="px-4 py-10 text-center text-sm text-foreground-400">
+                      <td colSpan={isAdmin ? 6 : 5} className="px-4 py-10 text-center text-sm text-foreground-400">
                         Chưa có số liệu trong tháng này.
                       </td>
                     </tr>
@@ -331,6 +342,28 @@ export default function StaffStats() {
                         <td className="px-4 py-3 text-right">{s.newCustomers.toLocaleString("vi-VN")}</td>
                         <td className="px-4 py-3 text-right">{s.totalDeposits.toLocaleString("vi-VN")}đ</td>
                         <td className="px-4 py-3 text-right">{s.totalBets.toLocaleString("vi-VN")}đ</td>
+                        <td className="px-4 py-3 text-center">
+                          {(isAdmin || s.staffId === currentUser?.id) && (
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setEditTarget(s)}
+                                className="w-7 h-7 rounded-md flex items-center justify-center text-foreground-400 hover:bg-primary-500/10 hover:text-primary-500 cursor-pointer"
+                                title="Sửa"
+                              >
+                                <i className="ri-edit-line text-sm" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeleteTarget(s)}
+                                className="w-7 h-7 rounded-md flex items-center justify-center text-foreground-400 hover:bg-red-500/10 hover:text-red-500 cursor-pointer"
+                                title="Xóa"
+                              >
+                                <i className="ri-delete-bin-line text-sm" />
+                              </button>
+                            </div>
+                          )}
+                        </td>
                       </tr>
                     ))
                   )}
@@ -339,6 +372,71 @@ export default function StaffStats() {
             </div>
           </div>
         </>
+      )}
+
+      {editTarget && (
+        <EditModal
+          stat={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSave={async (updated) => {
+            setBusy(true);
+            try {
+              await updateStaffDailyStat(editTarget.id, updated);
+              notify("Đã cập nhật số liệu.");
+              setEditTarget(null);
+              reload();
+            } catch (e) {
+              notify(e instanceof Error ? e.message : "Cập nhật thất bại.");
+            } finally {
+              setBusy(false);
+            }
+          }}
+          busy={busy}
+        />
+      )}
+
+      {deleteTarget && (
+        <Modal
+          open
+          title="Xóa số liệu"
+          onClose={() => setDeleteTarget(null)}
+          footer={
+            <>
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="px-4 py-2 rounded-md bg-background-100 text-foreground-700 text-sm cursor-pointer whitespace-nowrap"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    await deleteStaffDailyStat(deleteTarget.id);
+                    notify("Đã xóa số liệu.");
+                    setDeleteTarget(null);
+                    reload();
+                  } catch (e) {
+                    notify(e instanceof Error ? e.message : "Xóa thất bại.");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+                className="px-4 py-2 rounded-md bg-red-500 text-white text-sm font-medium disabled:opacity-50 cursor-pointer whitespace-nowrap"
+              >
+                Xóa
+              </button>
+            </>
+          }
+        >
+          <p className="text-sm text-foreground-700">
+            Xóa số liệu ngày <span className="font-semibold">{deleteTarget.date}</span>
+            {deleteTarget.staffName && ` của ${deleteTarget.staffName}`}?
+          </p>
+        </Modal>
       )}
 
       {toast && (
@@ -351,7 +449,7 @@ export default function StaffStats() {
   );
 }
 
-function StaffInputForm({ userId, userName, onNotify }: { userId: string; userName: string; onNotify: (msg: string) => void }) {
+function StaffInputForm({ userId, userName, onNotify, onReload }: { userId: string; userName: string; onNotify: (msg: string) => void; onReload?: () => void }) {
   const [date, setDate] = useState(todayStr());
   const [newCustomers, setNewCustomers] = useState("");
   const [totalDeposits, setTotalDeposits] = useState("");
@@ -392,6 +490,7 @@ function StaffInputForm({ userId, userName, onNotify }: { userId: string; userNa
         totalBets: parseInt(totalBets.replace(/[^0-9]/g, ""), 10) || 0,
       });
       onNotify("Đã lưu số liệu ngày " + date);
+      onReload?.();
     } catch (e) {
       onNotify(e instanceof Error ? e.message : "Lưu thất bại.");
     } finally {
@@ -494,5 +593,89 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
         Thử lại
       </button>
     </div>
+  );
+}
+
+function EditModal({
+  stat,
+  onClose,
+  onSave,
+  busy,
+}: {
+  stat: StaffDailyStat;
+  onClose: () => void;
+  onSave: (input: { newCustomers: number; totalDeposits: number; totalBets: number }) => void;
+  busy: boolean;
+}) {
+  const [newCustomers, setNewCustomers] = useState(String(stat.newCustomers));
+  const [totalDeposits, setTotalDeposits] = useState(String(stat.totalDeposits));
+  const [totalBets, setTotalBets] = useState(String(stat.totalBets));
+
+  const submit = () => {
+    onSave({
+      newCustomers: parseInt(newCustomers.replace(/[^0-9]/g, ""), 10) || 0,
+      totalDeposits: parseInt(totalDeposits.replace(/[^0-9]/g, ""), 10) || 0,
+      totalBets: parseInt(totalBets.replace(/[^0-9]/g, ""), 10) || 0,
+    });
+  };
+
+  return (
+    <Modal
+      open
+      title={`Sửa số liệu — ${stat.date}${stat.staffName ? ` (${stat.staffName})` : ""}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-md bg-background-100 text-foreground-700 text-sm cursor-pointer whitespace-nowrap"
+          >
+            Hủy
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={submit}
+            className="px-4 py-2 rounded-md bg-primary-500 text-white text-sm font-medium disabled:opacity-50 cursor-pointer whitespace-nowrap"
+          >
+            {busy ? "Đang lưu..." : "Lưu thay đổi"}
+          </button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div>
+          <label className="block text-sm text-foreground-700 mb-1.5">Khách mới</label>
+          <input
+            type="number"
+            min={0}
+            value={newCustomers}
+            onChange={(e) => setNewCustomers(e.target.value)}
+            className="w-full px-3 py-2.5 rounded-md border border-background-300 bg-background-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
+          />
+        </div>
+        <div>
+          <label className="block text-sm text-foreground-700 mb-1.5">Tổng nạp (VNĐ)</label>
+          <input
+            type="number"
+            min={0}
+            value={totalDeposits}
+            onChange={(e) => setTotalDeposits(e.target.value)}
+            className="w-full px-3 py-2.5 rounded-md border border-background-300 bg-background-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
+          />
+        </div>
+        <div>
+          <label className="block text-sm text-foreground-700 mb-1.5">Tổng cược (VNĐ)</label>
+          <input
+            type="number"
+            min={0}
+            value={totalBets}
+            onChange={(e) => setTotalBets(e.target.value)}
+            className="w-full px-3 py-2.5 rounded-md border border-background-300 bg-background-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
+          />
+        </div>
+      </div>
+    </Modal>
   );
 }

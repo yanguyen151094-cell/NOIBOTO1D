@@ -349,9 +349,11 @@ export interface StaffPunishment {
   reason: string;
   amount: number;
   punishmentDate: string;
+  createdBy: string;
   createdByName?: string;
   isRead: boolean;
   createdAt: string;
+  imageUrl?: string;
 }
 
 export type Role = "admin" | "staff";

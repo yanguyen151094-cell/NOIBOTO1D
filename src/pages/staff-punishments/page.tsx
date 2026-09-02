@@ -20,6 +20,7 @@ export default function StaffPunishments() {
   const [toast, setToast] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<StaffPunishment | null>(null);
+  const [detailTarget, setDetailTarget] = useState<StaffPunishment | null>(null);
   const [busy, setBusy] = useState(false);
 
   const notify = (msg: string) => {
@@ -35,7 +36,7 @@ export default function StaffPunishments() {
   } = useQuery<StaffPunishment[]>(async () => {
     let query = supabase
       .from("staff_punishments")
-      .select("*, profiles!staff_punishments_staff_id_fkey(name), profiles!staff_punishments_created_by_fkey(name)")
+      .select("*, profiles!staff_punishments_staff_id_fkey(name)")
       .order("created_at", { ascending: false });
 
     if (!isAdmin && currentUser) {
@@ -44,14 +45,27 @@ export default function StaffPunishments() {
 
     const { data, error: e } = await query;
     if (e) throw e;
-    return (data ?? []).map((row: Record<string, unknown>) => {
+
+    const mapped = (data ?? []).map((row: Record<string, unknown>) => {
       const mapped = mapStaffPunishment(row);
-      const staffProfile = (row.profiles as Array<{ name?: string }> | undefined)?.[0];
-      const creatorProfile = (row.profiles as Array<{ name?: string }> | undefined)?.[1];
-      mapped.staffName = staffProfile?.name ?? mapped.staffName ?? "";
-      mapped.createdByName = creatorProfile?.name ?? mapped.createdByName ?? "";
+      const profile = row.profiles as { name?: string } | undefined;
+      mapped.staffName = profile?.name ?? mapped.staffName ?? "";
       return mapped;
     });
+
+    const creatorIds = [...new Set(mapped.map((p) => p.createdBy).filter(Boolean))];
+    if (creatorIds.length > 0) {
+      const { data: creators } = await supabase
+        .from("profiles")
+        .select("id, name")
+        .in("id", creatorIds);
+      const nameMap = new Map((creators ?? []).map((c) => [c.id, c.name]));
+      mapped.forEach((p) => {
+        p.createdByName = nameMap.get(p.createdBy) ?? p.createdByName ?? "";
+      });
+    }
+
+    return mapped;
   });
 
   const todayPunishments = (punishments ?? []).filter((p) => p.punishmentDate === todayStr());
@@ -124,9 +138,11 @@ export default function StaffPunishments() {
       ) : (
         <div className="space-y-3">
           {(isAdmin ? punishments : otherPunishments).map((p) => (
-            <div
+            <button
               key={p.id}
-              className={`bg-background-50 rounded-lg border p-4 ${
+              type="button"
+              onClick={() => setDetailTarget(p)}
+              className={`w-full text-left bg-background-50 rounded-lg border p-4 transition-colors hover:bg-background-100 ${
                 !p.isRead && !isAdmin ? "border-red-300 bg-red-50/40" : "border-background-200"
               }`}
             >
@@ -149,7 +165,7 @@ export default function StaffPunishments() {
                   {!isAdmin && !p.isRead && (
                     <button
                       type="button"
-                      onClick={() => handleMarkRead(p.id)}
+                      onClick={(e) => { e.stopPropagation(); handleMarkRead(p.id); }}
                       className="px-2 py-1 rounded-md text-xs bg-red-100 text-red-700 hover:bg-red-200 cursor-pointer whitespace-nowrap"
                     >
                       Đã đọc
@@ -158,7 +174,7 @@ export default function StaffPunishments() {
                   {isAdmin && (
                     <button
                       type="button"
-                      onClick={() => setDeleteTarget(p)}
+                      onClick={(e) => { e.stopPropagation(); setDeleteTarget(p); }}
                       className="w-8 h-8 rounded-md flex items-center justify-center text-foreground-400 hover:bg-red-500/10 hover:text-red-500 cursor-pointer"
                       title="Xóa"
                     >
@@ -173,7 +189,7 @@ export default function StaffPunishments() {
                 </span>
               )}
               <p className="mt-2 text-[11px] text-foreground-400">{formatDateTime(p.createdAt)}</p>
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -241,6 +257,71 @@ export default function StaffPunishments() {
         </Modal>
       )}
 
+      {detailTarget && (
+        <Modal
+          open
+          title="Chi tiết thông báo phạt"
+          onClose={() => setDetailTarget(null)}
+          footer={
+            <button
+              type="button"
+              onClick={() => setDetailTarget(null)}
+              className="px-4 py-2 rounded-md bg-background-100 text-foreground-700 text-sm cursor-pointer whitespace-nowrap"
+            >
+              Đóng
+            </button>
+          }
+        >
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center shrink-0">
+                <i className="ri-alarm-warning-line text-red-600 text-lg" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground-900">{detailTarget.reason}</p>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-foreground-500">
+                  <span><i className="ri-user-line mr-0.5" />{detailTarget.staffName || "—"}</span>
+                  <span><i className="ri-calendar-line mr-0.5" />{detailTarget.punishmentDate}</span>
+                </div>
+              </div>
+            </div>
+            {detailTarget.amount > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-md p-3">
+                <p className="text-sm text-red-700">
+                  <span className="font-semibold">Số tiền phạt:</span> {detailTarget.amount.toLocaleString("vi-VN")}đ
+                </p>
+              </div>
+            )}
+            {detailTarget.imageUrl && (
+              <div>
+                <p className="text-xs text-foreground-500 mb-1">Hình ảnh minh chứng</p>
+                <img
+                  src={detailTarget.imageUrl}
+                  alt="Minh chứng phạt"
+                  className="w-full rounded-lg border border-background-200 object-cover max-h-80"
+                />
+              </div>
+            )}
+            <div className="flex items-center justify-between text-xs text-foreground-500">
+              <span>Gửi bởi {detailTarget.createdByName || "—"}</span>
+              <span>{formatDateTime(detailTarget.createdAt)}</span>
+            </div>
+            {!isAdmin && !detailTarget.isRead && (
+              <button
+                type="button"
+                onClick={async () => {
+                  await handleMarkRead(detailTarget.id);
+                  setDetailTarget((prev) => prev ? { ...prev, isRead: true } : prev);
+                }}
+                className="w-full px-4 py-2 rounded-md bg-red-500 text-white text-sm font-medium cursor-pointer whitespace-nowrap"
+              >
+                Đánh dấu đã đọc
+              </button>
+            )}
+          </div>
+        </Modal>
+      )}
+
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-foreground-950 text-background-50 text-sm px-4 py-2.5 rounded-lg shadow-sm animate-slide-up">
           <i className="ri-check-line mr-1 text-emerald-400" />
@@ -257,13 +338,16 @@ function CreatePunishmentModal({
   busy,
 }: {
   onClose: () => void;
-  onDone: (input: { staffId: string; reason: string; amount: number; punishmentDate: string }) => void;
+  onDone: (input: { staffId: string; reason: string; amount: number; punishmentDate: string; imageUrl?: string }) => void;
   busy: boolean;
 }) {
   const [staffId, setStaffId] = useState("");
   const [reason, setReason] = useState("");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(todayStr());
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const { data: staffList } = useQuery<{ id: string; name: string }[]>(async () => {
     const { data, error } = await supabase.from("profiles").select("id, name").eq("role", "staff").eq("active", true);
@@ -271,12 +355,40 @@ function CreatePunishmentModal({
     return (data ?? []) as { id: string; name: string }[];
   });
 
-  const submit = () => {
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Ảnh quá lớn. Tối đa 5MB.");
+      return;
+    }
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  const submit = async () => {
+    let imageUrl: string | undefined;
+    if (imageFile) {
+      setUploading(true);
+      const fileName = `${Date.now()}-${imageFile.name.replace(/[^a-zA-Z0-9.]/g, "_")}`;
+      const { data, error } = await supabase.storage.from("public").upload(`punishments/${fileName}`, imageFile, {
+        cacheControl: "3600",
+        upsert: false,
+      });
+      setUploading(false);
+      if (error) {
+        alert("Upload ảnh thất bại: " + error.message);
+        return;
+      }
+      const { data: urlData } = supabase.storage.from("public").getPublicUrl(`punishments/${fileName}`);
+      imageUrl = urlData?.publicUrl;
+    }
     onDone({
       staffId,
       reason: reason.trim(),
       amount: parseInt(amount.replace(/[^0-9]/g, ""), 10) || 0,
       punishmentDate: date,
+      imageUrl,
     });
   };
 
@@ -296,11 +408,11 @@ function CreatePunishmentModal({
           </button>
           <button
             type="button"
-            disabled={busy || !staffId || !reason.trim()}
+            disabled={busy || uploading || !staffId || !reason.trim()}
             onClick={submit}
             className="px-4 py-2 rounded-md bg-red-500 text-white text-sm font-medium disabled:opacity-50 cursor-pointer whitespace-nowrap"
           >
-            {busy ? "Đang gửi..." : "Gửi phạt"}
+            {busy || uploading ? "Đang gửi..." : "Gửi phạt"}
           </button>
         </>
       }
@@ -356,6 +468,37 @@ function CreatePunishmentModal({
               className="w-full px-3 py-2.5 rounded-md border border-background-300 bg-background-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
             />
           </div>
+        </div>
+        <div>
+          <label className="block text-sm text-foreground-700 mb-1.5">Hình ảnh minh chứng (tối đa 5MB)</label>
+          <div className="flex items-center gap-3">
+            <label className="px-3 py-2 rounded-md border border-background-300 bg-background-50 text-sm cursor-pointer hover:bg-background-100 flex items-center gap-2">
+              <i className="ri-image-add-line" />
+              Chọn ảnh
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageChange}
+              />
+            </label>
+            {imagePreview && (
+              <button
+                type="button"
+                onClick={() => { setImageFile(null); setImagePreview(null); }}
+                className="text-xs text-red-500 hover:text-red-600 cursor-pointer"
+              >
+                Xóa ảnh
+              </button>
+            )}
+          </div>
+          {imagePreview && (
+            <img
+              src={imagePreview}
+              alt="Preview"
+              className="mt-2 w-full max-h-48 rounded-lg border border-background-200 object-cover"
+            />
+          )}
         </div>
       </div>
     </Modal>

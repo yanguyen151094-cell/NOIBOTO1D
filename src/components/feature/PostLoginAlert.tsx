@@ -78,39 +78,58 @@ export default function PostLoginAlert() {
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setOpen(false)} />
-      <div className="relative w-full max-w-lg bg-background-50 rounded-xl border border-background-200 shadow-xl overflow-hidden animate-slide-up max-h-[80vh] flex flex-col">
-        <div className="px-5 py-4 border-b border-background-200 flex items-center justify-between bg-foreground-950">
-          <h3 className="font-heading font-semibold text-white text-sm">
-            Thông báo dành cho bạn
-          </h3>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setOpen(false)} />
+      <div className="relative w-full max-w-2xl bg-background-50 rounded-2xl border border-background-200 shadow-2xl overflow-hidden animate-slide-up max-h-[85vh] flex flex-col">
+        {/* Header */}
+        <div className="px-6 py-5 border-b border-background-200 flex items-center justify-between bg-gradient-to-r from-foreground-950 to-foreground-900">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+              <i className="ri-notification-3-line text-white text-lg" />
+            </div>
+            <div>
+              <h3 className="font-heading font-bold text-white text-base">
+                Thông báo dành cho bạn
+              </h3>
+              <p className="text-xs text-white/60 mt-0.5">
+                {punishments.length > 0 && rewards.length > 0
+                  ? `Bạn có ${punishments.length} thông báo phạt và ${rewards.length} thưởng`
+                  : punishments.length > 0
+                  ? `Bạn có ${punishments.length} thông báo phạt`
+                  : `Bạn có ${rewards.length} thưởng gần đây`}
+              </p>
+            </div>
+          </div>
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 cursor-pointer"
+            className="w-9 h-9 rounded-xl flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 cursor-pointer transition-colors"
           >
-            <i className="ri-close-line" />
+            <i className="ri-close-line text-xl" />
           </button>
         </div>
 
-        <div className="overflow-y-auto cs-scroll p-5 space-y-4">
+        {/* Body */}
+        <div className="overflow-y-auto cs-scroll p-6 space-y-5">
           {rewards.length > 0 && (
             <div>
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center">
-                  <i className="ri-gift-2-line text-emerald-600 text-sm" />
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center">
+                  <i className="ri-gift-2-line text-emerald-600 text-lg" />
                 </div>
-                <p className="text-sm font-semibold text-emerald-700">Thưởng gần đây</p>
+                <p className="text-base font-bold text-emerald-700">Thưởng gần đây</p>
+                <span className="ml-auto text-xs px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 font-semibold">
+                  {rewards.length} lần
+                </span>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {rewards.map((r) => (
-                  <div key={r.id} className="bg-emerald-50 border border-emerald-100 rounded-lg p-3">
-                    <p className="text-sm font-medium text-foreground-900">{r.workName}</p>
-                    <p className="text-xs text-emerald-700 mt-0.5">
+                  <div key={r.id} className="bg-emerald-50/80 border-2 border-emerald-200 rounded-xl p-4">
+                    <p className="text-sm font-bold text-foreground-900">{r.workName}</p>
+                    <p className="text-sm text-emerald-700 mt-1.5 font-semibold">
                       Số tiền: {r.amount.toLocaleString("vi-VN")}đ
                     </p>
-                    <p className="text-[11px] text-foreground-500 mt-1">
-                      Ngân hàng: {r.bankName} · STK: {r.accountNumber}
+                    <p className="text-xs text-foreground-500 mt-2">
+                      Ngân hàng: <span className="font-medium text-foreground-700">{r.bankName}</span> · STK: <span className="font-medium text-foreground-700">{r.accountNumber}</span>
                     </p>
                   </div>
                 ))}
@@ -120,28 +139,33 @@ export default function PostLoginAlert() {
 
           {punishments.length > 0 && (
             <div>
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-7 h-7 rounded-lg bg-red-100 flex items-center justify-center">
-                  <i className="ri-alarm-warning-line text-red-600 text-sm" />
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className="w-9 h-9 rounded-xl bg-red-100 flex items-center justify-center">
+                  <i className="ri-alarm-warning-line text-red-600 text-lg" />
                 </div>
-                <p className="text-sm font-semibold text-red-700">Thông báo phạt chưa đọc</p>
+                <p className="text-base font-bold text-red-700">Thông báo phạt chưa đọc</p>
+                <span className="ml-auto text-xs px-2.5 py-1 rounded-full bg-red-100 text-red-700 font-semibold">
+                  {punishments.length} lần
+                </span>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {punishments.map((p) => (
-                  <div key={p.id} className="bg-red-50 border border-red-100 rounded-lg p-3">
-                    <p className="text-sm font-medium text-foreground-900">{p.reason}</p>
+                  <div key={p.id} className="bg-red-50/80 border-2 border-red-200 rounded-xl p-4">
+                    <p className="text-sm font-bold text-foreground-900 leading-relaxed">{p.reason}</p>
                     {p.amount > 0 && (
-                      <p className="text-xs text-red-700 mt-0.5">
+                      <p className="text-sm text-red-700 mt-1.5 font-semibold">
                         Số tiền phạt: {p.amount.toLocaleString("vi-VN")}đ
                       </p>
                     )}
-                    <p className="text-[11px] text-foreground-500 mt-1">Ngày phạt: {p.punishmentDate}</p>
+                    <p className="text-xs text-foreground-500 mt-2">
+                      Ngày phạt: <span className="font-medium text-foreground-700">{p.punishmentDate}</span>
+                    </p>
                     <button
                       type="button"
                       onClick={() => handleMarkRead(p.id)}
-                      className="mt-2 px-3 py-1 rounded-md text-xs bg-red-100 text-red-700 hover:bg-red-200 cursor-pointer whitespace-nowrap"
+                      className="mt-3 px-4 py-2 rounded-lg text-xs bg-red-100 text-red-700 hover:bg-red-200 cursor-pointer whitespace-nowrap font-semibold transition-colors"
                     >
-                      Đã đọc
+                      Đánh dấu đã đọc
                     </button>
                   </div>
                 ))}
@@ -150,13 +174,14 @@ export default function PostLoginAlert() {
           )}
         </div>
 
-        <div className="px-5 py-3 border-t border-background-200 bg-background-50">
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-background-200 bg-background-50">
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="w-full py-2.5 rounded-lg bg-primary-500 text-white text-sm font-medium hover:bg-primary-600 cursor-pointer whitespace-nowrap"
+            className="w-full py-3 rounded-xl bg-primary-500 text-white text-sm font-bold hover:bg-primary-600 cursor-pointer whitespace-nowrap transition-colors"
           >
-            Đã hiểu
+            Đã hiểu — Đóng thông báo
           </button>
         </div>
       </div>

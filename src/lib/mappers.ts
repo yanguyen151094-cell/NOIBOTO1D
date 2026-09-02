@@ -383,8 +383,10 @@ export function mapStaffPunishment(row: Record<string, unknown>): StaffPunishmen
     reason: (row.reason as string) ?? "",
     amount: Number(row.amount ?? 0),
     punishmentDate: (row.punishment_date as string) ?? "",
+    createdBy: (row.created_by as string) ?? "",
     createdByName: (row.created_by_name as string) ?? "",
     isRead: (row.is_read as boolean) ?? false,
     createdAt: (row.created_at as string) ?? "",
+    imageUrl: (row.image_url as string) ?? undefined,
   };
 }

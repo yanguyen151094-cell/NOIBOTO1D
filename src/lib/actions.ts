@@ -996,6 +996,21 @@ export async function upsertStaffDailyStat(input: StaffDailyStatInput): Promise<
   if (error) throw error;
 }
 
+export async function updateStaffDailyStat(id: string, input: Omit<StaffDailyStatInput, 'date'>): Promise<void> {
+  const { error } = await supabase.from("staff_daily_stats").update({
+    new_customers: input.newCustomers,
+    total_deposits: input.totalDeposits,
+    total_bets: input.totalBets,
+    updated_at: new Date().toISOString(),
+  }).eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteStaffDailyStat(id: string): Promise<void> {
+  const { error } = await supabase.from("staff_daily_stats").delete().eq("id", id);
+  if (error) throw error;
+}
+
 // ===== Staff Punishments =====
 
 export interface StaffPunishmentInput {
@@ -1003,6 +1018,7 @@ export interface StaffPunishmentInput {
   reason: string;
   amount: number;
   punishmentDate: string;
+  imageUrl?: string;
 }
 
 export async function createStaffPunishment(input: StaffPunishmentInput): Promise<void> {
@@ -1013,6 +1029,8 @@ export async function createStaffPunishment(input: StaffPunishmentInput): Promis
     amount: input.amount,
     punishment_date: input.punishmentDate,
     created_by: userId,
+    is_read: false,
+    image_url: input.imageUrl ?? null,
   });
   if (error) throw error;
 
