@@ -23,6 +23,9 @@ import YoutubePlayer, { type YoutubePlayerHandle } from "./YoutubePlayer";
 import QueuePanel from "./QueuePanel";
 import ChatPanel from "./ChatPanel";
 import VoiceCallPanel from "./VoiceCallPanel";
+import GiftBar from "./GiftBar";
+import GiftEffects from "./GiftEffects";
+import type { GiftBurst, GiftItem } from "./gifts";
 
 const ENDED = 0;
 const PLAYING = 1;
@@ -60,6 +63,7 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
 
   const playerRef = useRef<YoutubePlayerHandle>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const giftChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const lastLoadedVideoRef = useRef<string | null>(null);
   const lastLoadTimeRef = useRef(0);
   const queueRef = useRef<KaraokeSong[]>(queue);
@@ -74,6 +78,7 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
   const [toast, setToast] = useState("");
   const [videoError, setVideoError] = useState<string | null>(null);
   const [playerReady, setPlayerReady] = useState(false);
+  const [bursts, setBursts] = useState<GiftBurst[]>([]);
 
   const voice = useVoiceCall(
     roomId,
@@ -537,6 +542,40 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
     }
   };
 
+  // Kênh broadcast quà tặng: ai trong phòng bấm tặng là mọi người cùng thấy hiệu ứng
+  useEffect(() => {
+    if (!roomId) return;
+    const ch = supabase.channel(`karaoke-gift-${roomId}`, {
+      config: { broadcast: { self: true } },
+    });
+    ch.on("broadcast", { event: "karaoke-gift" }, ({ payload }: { payload?: Record<string, unknown> }) => {
+      const burst = (payload?.burst as GiftBurst) ?? null;
+      if (!burst) return;
+      setBursts((prev) => [...prev.slice(-4), burst]);
+      setTimeout(() => {
+        setBursts((prev) => prev.filter((b) => b.id !== burst.id));
+      }, 5000);
+    });
+    ch.subscribe();
+    giftChannelRef.current = ch;
+    return () => {
+      supabase.removeChannel(ch);
+      giftChannelRef.current = null;
+    };
+  }, [roomId]);
+
+  const handleSendGift = (gift: GiftItem) => {
+    const burst: GiftBurst = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      emoji: gift.emoji,
+      label: gift.label,
+      senderName: currentUser?.name ?? "Thành viên",
+      mode: gift.mode,
+      count: gift.count,
+    };
+    giftChannelRef.current?.send({ type: "broadcast", event: "karaoke-gift", payload: { burst } });
+  };
+
   const playing = queue.find((s) => s.status === "playing");
 
   if (loading && !room) {
@@ -680,6 +719,11 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
           )}
         </div>
 
+        {/* Tặng hoa & cổ vũ */}
+        <div className="mt-3">
+          <GiftBar onSend={handleSendGift} />
+        </div>
+
         {/* Voice call */}
         <div className="mt-3">
           <VoiceCallPanel
@@ -725,6 +769,9 @@ export default function RoomView({ roomId, roomName, memberCount, onBack }: Room
           </div>
         </div>
       </div>
+
+      {/* Hiệu ứng quà tặng bay màn hình */}
+      <GiftEffects bursts={bursts} />
 
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-foreground-950 text-background-50 text-sm px-4 py-2.5 rounded-lg animate-slide-up">
