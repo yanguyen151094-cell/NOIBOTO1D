@@ -183,11 +183,18 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
   const handleSignal = useCallback(
     async (payload: SignalPayload) => {
       if (!payload || !payload.from || payload.from === userIdRef.current) return;
+      // CHỈ xử lý tín hiệu gửi cho mình — tránh nhận nhầm tín hiệu của người khác
+      if (payload.to && payload.to !== userIdRef.current) return;
       const from = payload.from;
       const name = payload.name;
 
       if (payload.type === "offer") {
         let pc = pcMapRef.current.get(from);
+        // Nếu đã có kết nối cũng không ổn định, đóng và tạo lại
+        if (pc && pc.connectionState !== "connected" && pc.connectionState !== "connecting") {
+          closePeer(from);
+          pc = undefined;
+        }
         if (!pc) pc = createPeerConnection(from, name);
         try {
           if (payload.sdp) await pc.setRemoteDescription(payload.sdp);
@@ -243,6 +250,13 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
     // Đóng kết nối với người đã rời phòng
     pcMapRef.current.forEach((_pc, peerId) => {
       if (!online.has(peerId)) closePeer(peerId);
+    });
+
+    // Dọn dẹp kết nối hỏng (failed/closed) để có thể tạo lại
+    pcMapRef.current.forEach((pc, peerId) => {
+      if (pc.connectionState === "failed" || pc.connectionState === "closed") {
+        closePeer(peerId);
+      }
     });
 
     // Thiết lập kết nối mới: userId nhỏ hơn (theo thứ tự chuỗi) sẽ chủ động tạo offer
@@ -389,6 +403,15 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
       }
     };
   }, []);
+
+  // Kiểm tra kết nối định kỳ để bắt lại kết nối bị miss hoặc đóng kết nối hỏng
+  useEffect(() => {
+    if (!isActive) return;
+    const interval = setInterval(() => {
+      ensureConnections();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isActive, ensureConnections]);
 
   return {
     isActive,
