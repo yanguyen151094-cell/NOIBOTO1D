@@ -7,12 +7,16 @@ import {
   renameStaff,
   setStaffChannels,
   transferStaffData,
+  updateUserRole,
+  sendDirectMessage,
 } from "@/lib/actions";
 import type { User } from "@/types";
 import { presenceMeta, platformMeta, formatDateTime } from "@/utils/ui";
+import { useNavigate } from "react-router-dom";
 
 export default function Staff() {
   const { staff, channels, loading, error, reload } = useStaff();
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<User | null>(null);
@@ -22,6 +26,9 @@ export default function Staff() {
   const [newPassword, setNewPassword] = useState("");
   const [toast, setToast] = useState("");
   const [busy, setBusy] = useState(false);
+  const [messageTarget, setMessageTarget] = useState<User | null>(null);
+  const [messageContent, setMessageContent] = useState("");
+  const [promoteTarget, setPromoteTarget] = useState<User | null>(null);
 
   const notify = (msg: string) => {
     setToast(msg);
@@ -77,6 +84,42 @@ export default function Staff() {
       reload();
     } catch (e) {
       notify(e instanceof Error ? e.message : "Xóa tài khoản thất bại.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!messageTarget || !messageContent.trim()) return;
+    setBusy(true);
+    try {
+      const roomId = await sendDirectMessage(messageTarget.id, messageContent.trim());
+      notify(`Đã gửi tin nhắn cho ${messageTarget.name}.`);
+      setMessageTarget(null);
+      setMessageContent("");
+      navigate(`/team?room=${roomId}`);
+    } catch (e) {
+      notify(e instanceof Error ? e.message : "Gửi tin nhắn thất bại.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handlePromote = async () => {
+    if (!promoteTarget) return;
+    setBusy(true);
+    try {
+      const newRole = promoteTarget.role === "admin" ? "staff" : "admin";
+      await updateUserRole(promoteTarget.id, newRole);
+      notify(
+        newRole === "admin"
+          ? `Đã chỉ định ${promoteTarget.name} làm Admin.`
+          : `Đã hạ ${promoteTarget.name} xuống Nhân viên.`
+      );
+      setPromoteTarget(null);
+      reload();
+    } catch (e) {
+      notify(e instanceof Error ? e.message : "Thao tác thất bại.");
     } finally {
       setBusy(false);
     }
@@ -231,6 +274,12 @@ export default function Staff() {
                           <IconBtn icon="ri-key-2-line" title="Đặt lại mật khẩu" onClick={() => setResetTarget(s)} />
                           <IconBtn icon="ri-logout-box-r-line" title="Thu hồi phiên" onClick={() => revokeSession(s)} />
                           <IconBtn icon="ri-arrow-left-right-line" title="Chuyển dữ liệu" onClick={() => setTransferTarget(s)} />
+                          <IconBtn icon="ri-message-2-line" title="Nhắn tin riêng" onClick={() => setMessageTarget(s)} />
+                          <IconBtn
+                            icon={s.role === "admin" ? "ri-shield-cross-line" : "ri-shield-star-line"}
+                            title={s.role === "admin" ? "Hạ xuống Nhân viên" : "Chỉ định làm Admin"}
+                            onClick={() => setPromoteTarget(s)}
+                          />
                           <IconBtn icon="ri-delete-bin-line" title="Xóa tài khoản" danger onClick={() => requestDelete(s)} />
                         </div>
                       </td>
@@ -291,6 +340,12 @@ export default function Staff() {
                     <IconBtn icon="ri-key-2-line" title="Đặt lại mật khẩu" onClick={() => setResetTarget(s)} />
                     <IconBtn icon="ri-logout-box-r-line" title="Thu hồi phiên" onClick={() => revokeSession(s)} />
                     <IconBtn icon="ri-arrow-left-right-line" title="Chuyển dữ liệu" onClick={() => setTransferTarget(s)} />
+                    <IconBtn icon="ri-message-2-line" title="Nhắn tin riêng" onClick={() => setMessageTarget(s)} />
+                    <IconBtn
+                      icon={s.role === "admin" ? "ri-shield-cross-line" : "ri-shield-star-line"}
+                      title={s.role === "admin" ? "Hạ xuống Nhân viên" : "Chỉ định làm Admin"}
+                      onClick={() => setPromoteTarget(s)}
+                    />
                     <IconBtn icon="ri-delete-bin-line" title="Xóa tài khoản" danger onClick={() => requestDelete(s)} />
                   </div>
                 </div>
@@ -433,6 +488,111 @@ export default function Staff() {
           <i className="ri-check-line mr-1 text-emerald-400" />
           {toast}
         </div>
+      )}
+
+      {messageTarget && (
+        <Modal
+          open
+          title={`Nhắn tin cho ${messageTarget.name}`}
+          onClose={() => { setMessageTarget(null); setMessageContent(""); }}
+          footer={
+            <>
+              <button
+                type="button"
+                onClick={() => { setMessageTarget(null); setMessageContent(""); }}
+                className="px-4 py-2 rounded-md bg-background-100 text-foreground-700 text-sm cursor-pointer whitespace-nowrap"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                disabled={busy || !messageContent.trim()}
+                onClick={handleSendMessage}
+                className="px-4 py-2 rounded-md bg-primary-500 text-white text-sm font-medium disabled:opacity-50 cursor-pointer whitespace-nowrap"
+              >
+                {busy ? "Đang gửi..." : "Gửi tin nhắn"}
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-background-100">
+              <Avatar name={messageTarget.name} size="md" />
+              <div>
+                <p className="text-sm font-semibold text-foreground-900">{messageTarget.name}</p>
+                <p className="text-xs text-foreground-500">@{messageTarget.username}</p>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm text-foreground-700 mb-1.5">Nội dung tin nhắn</label>
+              <textarea
+                value={messageContent}
+                onChange={(e) => setMessageContent(e.target.value)}
+                rows={4}
+                maxLength={500}
+                placeholder={`Nhắn tin riêng cho ${messageTarget.name}...`}
+                className="w-full px-3 py-2.5 rounded-md border border-background-300 bg-background-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none"
+                autoFocus
+              />
+              <p className="text-xs text-foreground-400 mt-1">{messageContent.length}/500 ký tự</p>
+            </div>
+            <p className="text-xs text-foreground-500">
+              Tin nhắn sẽ được gửi đến phòng trò chuyện riêng. Bạn sẽ được chuyển đến đó sau khi gửi.
+            </p>
+          </div>
+        </Modal>
+      )}
+
+      {promoteTarget && (
+        <Modal
+          open
+          title={promoteTarget.role === "admin" ? "Hạ quyền Admin" : "Chỉ định Admin"}
+          onClose={() => setPromoteTarget(null)}
+          footer={
+            <>
+              <button
+                type="button"
+                onClick={() => setPromoteTarget(null)}
+                className="px-4 py-2 rounded-md bg-background-100 text-foreground-700 text-sm cursor-pointer whitespace-nowrap"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={handlePromote}
+                className={`px-4 py-2 rounded-md text-white text-sm font-medium disabled:opacity-50 cursor-pointer whitespace-nowrap ${
+                  promoteTarget.role === "admin" ? "bg-amber-500 hover:bg-amber-600" : "bg-primary-500 hover:bg-primary-600"
+                }`}
+              >
+                {busy ? "Đang xử lý..." : promoteTarget.role === "admin" ? "Hạ xuống Nhân viên" : "Chỉ định làm Admin"}
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-background-100">
+              <Avatar name={promoteTarget.name} size="md" />
+              <div>
+                <p className="text-sm font-semibold text-foreground-900">{promoteTarget.name}</p>
+                <p className="text-xs text-foreground-500">
+                  Vai trò hiện tại: <span className="font-medium">{promoteTarget.role === "admin" ? "Admin" : "Nhân viên"}</span>
+                </p>
+              </div>
+            </div>
+            {promoteTarget.role === "admin" ? (
+              <p className="text-sm text-foreground-600">
+                Tài khoản <span className="font-semibold">{promoteTarget.name}</span> sẽ bị hạ xuống
+                thành <span className="font-semibold">Nhân viên</span>, mất quyền truy cập giao diện quản trị.
+              </p>
+            ) : (
+              <p className="text-sm text-foreground-600">
+                Tài khoản <span className="font-semibold">{promoteTarget.name}</span> sẽ được nâng lên thành{" "}
+                <span className="font-semibold text-primary-700">Admin</span>, có toàn quyền quản trị hệ thống.
+              </p>
+            )}
+          </div>
+        </Modal>
       )}
     </div>
   );

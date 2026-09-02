@@ -115,6 +115,53 @@ export default function StaffStats() {
     }));
   }, [filteredStats, month]);
 
+  const individualChartData = useMemo(() => {
+    if (!isAdmin || staffFilter !== "all" || !stats) return [];
+    const staffMap = new Map<string, { name: string; data: { day: string; newCustomers: number; totalDeposits: number; totalBets: number }[] }>();
+    const days = getDaysInMonth(Number(month.split("-")[0]), Number(month.split("-")[1]));
+
+    for (const s of stats) {
+      if (!staffMap.has(s.staffId)) {
+        staffMap.set(s.staffId, { name: s.staffName || "Nhân viên", data: [] });
+      }
+      const entry = staffMap.get(s.staffId)!;
+      entry.data.push({
+        day: s.date.slice(8),
+        newCustomers: s.newCustomers,
+        totalDeposits: s.totalDeposits,
+        totalBets: s.totalBets,
+      });
+    }
+
+    return Array.from(staffMap.entries()).map(([id, info]) => {
+      const dayMap = new Map<string, { newCustomers: number; totalDeposits: number; totalBets: number }>();
+      for (let i = 1; i <= days; i++) {
+        const d = `${month}-${String(i).padStart(2, "0")}`;
+        dayMap.set(d.slice(8), { newCustomers: 0, totalDeposits: 0, totalBets: 0 });
+      }
+      for (const d of info.data) {
+        const existing = dayMap.get(d.day);
+        if (existing) {
+          existing.newCustomers += d.newCustomers;
+          existing.totalDeposits += d.totalDeposits;
+          existing.totalBets += d.totalBets;
+        }
+      }
+      const data = Array.from(dayMap.entries()).map(([day, vals]) => ({
+        day,
+        "Khách mới": vals.newCustomers,
+        "Tổng nạp": vals.totalDeposits,
+        "Tổng cược": vals.totalBets,
+      }));
+      const totals = data.reduce((acc, d) => ({
+        newCustomers: acc.newCustomers + d["Khách mới"],
+        totalDeposits: acc.totalDeposits + d["Tổng nạp"],
+        totalBets: acc.totalBets + d["Tổng cược"],
+      }), { newCustomers: 0, totalDeposits: 0, totalBets: 0 });
+      return { id, name: info.name, data, totals };
+    });
+  }, [stats, staffFilter, isAdmin, month]);
+
   const totals = useMemo(() => {
     return filteredStats.reduce(
       (acc, s) => {
@@ -216,6 +263,46 @@ export default function StaffStats() {
               </ResponsiveContainer>
             </div>
           </div>
+
+          {individualChartData.length > 0 && (
+            <div className="mb-6">
+              <h3 className="font-heading font-semibold text-foreground-900 mb-3">Biểu đồ từng nhân viên</h3>
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                {individualChartData.map((staff) => (
+                  <div key={staff.id} className="bg-background-50 rounded-lg border border-background-200 p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-semibold text-foreground-900">{staff.name}</p>
+                      <div className="flex items-center gap-3 text-[11px] text-foreground-500">
+                        <span className="text-primary-600">{staff.totals.newCustomers} khách</span>
+                        <span className="text-accent-600">{staff.totals.totalDeposits.toLocaleString("vi-VN")}đ</span>
+                        <span className="text-secondary-600">{staff.totals.totalBets.toLocaleString("vi-VN")}đ</span>
+                      </div>
+                    </div>
+                    <div className="w-full h-48">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={staff.data} margin={{ top: 2, right: 2, left: -20, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="oklch(var(--background-300) / 0.3)" />
+                          <XAxis dataKey="day" tick={{ fontSize: 10, fill: "oklch(var(--foreground-500))" }} axisLine={false} tickLine={false} />
+                          <YAxis tick={{ fontSize: 10, fill: "oklch(var(--foreground-500))" }} axisLine={false} tickLine={false} />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: "oklch(var(--background-50))",
+                              border: "1px solid oklch(var(--background-200))",
+                              borderRadius: 6,
+                              fontSize: 11,
+                            }}
+                          />
+                          <Bar dataKey="Khách mới" fill="oklch(var(--primary-500))" radius={[3, 3, 0, 0]} barSize={8} />
+                          <Bar dataKey="Tổng nạp" fill="oklch(var(--accent-500))" radius={[3, 3, 0, 0]} barSize={8} />
+                          <Bar dataKey="Tổng cược" fill="oklch(var(--secondary-500))" radius={[3, 3, 0, 0]} barSize={8} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="bg-background-50 rounded-lg border border-background-200 overflow-hidden">
             <div className="overflow-x-auto">

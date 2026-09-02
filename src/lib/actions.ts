@@ -794,15 +794,41 @@ export async function deleteAnnouncementComment(id: string): Promise<void> {
 }
 
 export async function uploadImage(file: File, folder: string): Promise<string> {
-  const ext = file.name.split(".").pop() ?? "jpg";
-  const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-  const { error } = await supabase.storage.from("uploads").upload(path, file, {
-    cacheControl: "3600",
-    upsert: false,
-  });
-  if (error) throw error;
-  const { data } = supabase.storage.from("uploads").getPublicUrl(path);
-  return data.publicUrl;
+  const ext = file.name.split(".").pop()?.replace(/[^a-zA-Z0-9]/g, "") ?? "jpg";
+  const safeName = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
+  const path = `${folder}/${safeName}`;
+
+  const buckets = ["uploads", "public"];
+  let lastError: unknown;
+
+  for (const bucket of buckets) {
+    try {
+      const { error } = await supabase.storage.from(bucket).upload(path, file, {
+        cacheControl: "3600",
+        upsert: false,
+      });
+      if (error) {
+        if (error.message?.toLowerCase().includes("bucket") || error.message?.toLowerCase().includes("not found")) {
+          lastError = error;
+          continue;
+        }
+        throw new Error(`Lỗi tải ảnh: ${error.message}`);
+      }
+      const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+      return data.publicUrl;
+    } catch (e) {
+      lastError = e;
+      if (e instanceof Error && e.message?.toLowerCase().includes("bucket")) {
+        continue;
+      }
+      throw e;
+    }
+  }
+
+  const msg = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(
+    `Không thể tải ảnh lên. Vui lòng kiểm tra bucket "uploads" hoặc "public" trong Supabase Storage. Lỗi: ${msg}`
+  );
 }
 
 export async function sendKaraokeMessage(roomId: string, content: string, imageUrl?: string): Promise<void> {
@@ -1013,4 +1039,61 @@ export async function markPunishmentRead(id: string): Promise<void> {
     .update({ is_read: true })
     .eq("id", id);
   if (error) throw error;
+}
+
+export async function updateUserRole(userId: string, role: "admin" | "staff"): Promise<void> {
+  const { error } = await supabase.from("profiles").update({ role }).eq("id", userId);
+  if (error) throw new Error(`Không thể cập nhật vai trò: ${error.message}`);
+}
+
+export async function sendDirectMessage(staffId: string, content: string): Promise<string> {
+  const userId = await requireUserId();
+  const roomName = `Tin nhắn riêng`;
+  const { data: existingRoom } = await supabase
+    .from("team_rooms")
+    .select("id")
+    .eq("name", roomName)
+    .eq("created_by", userId)
+    .maybeSingle();
+
+  let roomId: string;
+  if (existingRoom?.id) {
+    roomId = existingRoom.id as string;
+    const { data: members } = await supabase
+      .from("team_room_members")
+      .select("user_id")
+      .eq("room_id", roomId);
+    const memberIds = new Set((members ?? []).map((m) => m.user_id));
+    if (!memberIds.has(staffId)) {
+      const { error } = await supabase.from("team_room_members").insert({ room_id: roomId, user_id: staffId });
+      if (error) throw new Error(`Không thể thêm thành viên: ${error.message}`);
+    }
+    if (!memberIds.has(userId)) {
+      await supabase.from("team_room_members").insert({ room_id: roomId, user_id: userId });
+    }
+  } else {
+    const { data, error } = await supabase
+      .from("team_rooms")
+      .insert({ name: roomName, created_by: userId })
+      .select("id")
+      .single();
+    if (error) throw new Error(`Không thể tạo phòng: ${error.message}`);
+    roomId = data.id as string;
+    await supabase.from("team_room_members").insert([
+      { room_id: roomId, user_id: userId },
+      { room_id: roomId, user_id: staffId },
+    ]);
+  }
+
+  if (content.trim()) {
+    const { error } = await supabase.from("team_messages").insert({
+      room_id: roomId,
+      sender_id: userId,
+      content: content.trim(),
+      sent_at: new Date().toISOString(),
+    });
+    if (error) throw new Error(`Không thể gửi tin nhắn: ${error.message}`);
+  }
+
+  return roomId;
 }

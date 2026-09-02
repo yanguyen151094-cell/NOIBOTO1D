@@ -3,6 +3,7 @@ import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import Sidebar from "@/components/feature/Sidebar";
 import Topbar from "@/components/feature/Topbar";
+import PostLoginAlert from "@/components/feature/PostLoginAlert";
 import { supabase } from "@/lib/supabase";
 import type { AppNotification } from "@/types";
 
@@ -137,6 +138,8 @@ export default function AppLayout() {
           </div>
         </div>
       )}
+
+      <PostLoginAlert />
     </div>
   );
 }

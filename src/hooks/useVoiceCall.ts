@@ -1,8 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import AgoraRTC, {
-  type IAgoraRTCClient,
-  type IMicrophoneAudioTrack,
-} from "agora-rtc-sdk-ng";
 import { supabase } from "@/lib/supabase";
 
 export interface VoicePeerState {
@@ -24,10 +20,24 @@ export interface VoiceCallReturn {
   toggleMute: () => void;
 }
 
-function streamFromTrack(track: MediaStreamTrack | undefined | null): MediaStream | null {
-  if (!track) return null;
-  return new MediaStream([track]);
+interface SignalPayload {
+  to?: string;
+  from?: string;
+  name?: string;
+  type?: "offer" | "answer" | "ice";
+  sdp?: any;
+  candidate?: any;
 }
+
+interface PresenceItem {
+  userId?: string;
+  name?: string;
+}
+
+// STUN công cộng của Google - hoàn toàn miễn phí, không cần tài khoản.
+const RTC_CONFIG = {
+  iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+};
 
 export function useVoiceCall(roomId: string, userId: string, userName: string): VoiceCallReturn {
   const [isActive, setIsActive] = useState(false);
@@ -38,9 +48,11 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
   const [participants, setParticipants] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const clientRef = useRef<IAgoraRTCClient | null>(null);
-  const localTrackRef = useRef<IMicrophoneAudioTrack | null>(null);
-  const nameMapRef = useRef<Record<string, string>>({});
+  const pcMapRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const remoteStreamMapRef = useRef<Map<string, MediaStream>>(new Map());
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const namesRef = useRef<Record<string, string>>({});
 
   const userIdRef = useRef(userId);
   const userNameRef = useRef(userName);
@@ -61,24 +73,188 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
     activeRef.current = isActive;
   }, [isActive]);
 
-  const refreshPeers = useCallback(() => {
-    const client = clientRef.current;
-    if (!client) return;
+  const syncPeersState = useCallback(() => {
     const next: Record<string, VoicePeerState> = {};
     const ids: string[] = [];
-    client.remoteUsers.forEach((user) => {
-      const uid = String(user.uid);
-      const stream = streamFromTrack(user.audioTrack?.getMediaStreamTrack());
-      next[uid] = {
-        stream,
-        userName: nameMapRef.current[uid] ?? "Thành viên",
+    pcMapRef.current.forEach((_pc, peerId) => {
+      next[peerId] = {
+        stream: remoteStreamMapRef.current.get(peerId) ?? null,
+        userName: namesRef.current[peerId] ?? "Thành viên",
         isMuted: false,
       };
-      ids.push(uid);
+      ids.push(peerId);
     });
     setPeers(next);
     setParticipants(ids);
   }, []);
+
+  const broadcast = useCallback((payload: SignalPayload) => {
+    channelRef.current?.send({ type: "broadcast", event: "voice-signal", payload });
+  }, []);
+
+  const closePeer = useCallback(
+    (peerId: string) => {
+      const pc = pcMapRef.current.get(peerId);
+      if (pc) {
+        try {
+          pc.close();
+        } catch {
+          // ignore
+        }
+        pcMapRef.current.delete(peerId);
+      }
+      remoteStreamMapRef.current.delete(peerId);
+      syncPeersState();
+    },
+    [syncPeersState]
+  );
+
+  const createPeerConnection = useCallback(
+    (peerId: string, peerName?: string): RTCPeerConnection => {
+      const pc = new RTCPeerConnection(RTC_CONFIG);
+      pcMapRef.current.set(peerId, pc);
+      if (peerName) namesRef.current[peerId] = peerName;
+
+      const remoteStream = new MediaStream();
+      remoteStreamMapRef.current.set(peerId, remoteStream);
+
+      pc.ontrack = (event) => {
+        event.streams.forEach((s) => {
+          s.getTracks().forEach((t) => {
+            if (!remoteStream.getTracks().includes(t)) {
+              remoteStream.addTrack(t);
+            }
+          });
+        });
+        syncPeersState();
+      };
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          broadcast({
+            to: peerId,
+            from: userIdRef.current,
+            name: userNameRef.current,
+            type: "ice",
+            candidate: event.candidate.toJSON(),
+          });
+        }
+      };
+
+      pc.onconnectionstatechange = () => {
+        const state = pc.connectionState;
+        if (state === "failed" || state === "closed") {
+          if (pcMapRef.current.get(peerId) === pc) {
+            closePeer(peerId);
+          }
+        }
+      };
+
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((t) => pc.addTrack(t, localStreamRef.current as MediaStream));
+      }
+
+      return pc;
+    },
+    [broadcast, closePeer, syncPeersState]
+  );
+
+  const sendOffer = useCallback(
+    async (peerId: string) => {
+      if (pcMapRef.current.has(peerId)) return;
+      const pc = createPeerConnection(peerId);
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        broadcast({
+          to: peerId,
+          from: userIdRef.current,
+          name: userNameRef.current,
+          type: "offer",
+          sdp: pc.localDescription ?? undefined,
+        });
+      } catch {
+        closePeer(peerId);
+      }
+    },
+    [createPeerConnection, broadcast, closePeer]
+  );
+
+  const handleSignal = useCallback(
+    async (payload: SignalPayload) => {
+      if (!payload || !payload.from || payload.from === userIdRef.current) return;
+      const from = payload.from;
+      const name = payload.name;
+
+      if (payload.type === "offer") {
+        let pc = pcMapRef.current.get(from);
+        if (!pc) pc = createPeerConnection(from, name);
+        try {
+          if (payload.sdp) await pc.setRemoteDescription(payload.sdp);
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          broadcast({
+            to: from,
+            from: userIdRef.current,
+            name: userNameRef.current,
+            type: "answer",
+            sdp: pc.localDescription ?? undefined,
+          });
+        } catch {
+          closePeer(from);
+        }
+      } else if (payload.type === "answer") {
+        const pc = pcMapRef.current.get(from);
+        if (pc && payload.sdp) {
+          try {
+            await pc.setRemoteDescription(payload.sdp);
+          } catch {
+            // ignore
+          }
+        }
+      } else if (payload.type === "ice") {
+        const pc = pcMapRef.current.get(from);
+        if (pc && payload.candidate) {
+          try {
+            await pc.addIceCandidate(payload.candidate);
+          } catch {
+            // ignore
+          }
+        }
+      }
+    },
+    [createPeerConnection, broadcast, closePeer]
+  );
+
+  const ensureConnections = useCallback(() => {
+    const channel = channelRef.current;
+    if (!channel) return;
+    const state = channel.presenceState<Record<string, PresenceItem>>();
+    const online = new Set<string>();
+    Object.values(state).forEach((presences) => {
+      (presences as unknown as PresenceItem[]).forEach((p) => {
+        if (p.userId && p.userId !== userIdRef.current) {
+          online.add(p.userId);
+          if (p.name) namesRef.current[p.userId] = p.name;
+        }
+      });
+    });
+
+    // Đóng kết nối với người đã rời phòng
+    pcMapRef.current.forEach((_pc, peerId) => {
+      if (!online.has(peerId)) closePeer(peerId);
+    });
+
+    // Thiết lập kết nối mới: userId nhỏ hơn (theo thứ tự chuỗi) sẽ chủ động tạo offer
+    online.forEach((peerId) => {
+      if (pcMapRef.current.has(peerId)) return;
+      if (userIdRef.current && userIdRef.current < peerId) {
+        sendOffer(peerId);
+      }
+    });
+
+    syncPeersState();
+  }, [closePeer, sendOffer, syncPeersState]);
 
   const join = useCallback(async () => {
     if (joiningRef.current || activeRef.current) return;
@@ -91,63 +267,47 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
       setIsJoining(true);
       joiningRef.current = true;
 
-      // Lấy tên thành viên để hiển thị đúng tên người hát (không bắt buộc)
+      // 1. Xin quyền micro
+      let stream: MediaStream;
       try {
-        const profRes = await supabase.from("profiles").select("id, name");
-        const map: Record<string, string> = {};
-        (profRes.data ?? []).forEach((p: { id: string; name: string }) => {
-          map[p.id] = p.name;
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
         });
-        nameMapRef.current = map;
-      } catch {
-        // Bỏ qua lỗi lấy tên, vẫn kết nối bình thường
+      } catch (e) {
+        const errName = (e as DOMException)?.name;
+        if (errName === "NotAllowedError" || errName === "PermissionDeniedError") {
+          throw new Error("PERMISSION_DENIED");
+        }
+        if (errName === "NotFoundError" || errName === "DevicesNotFoundError") {
+          throw new Error("DEVICE_NOT_FOUND");
+        }
+        throw new Error("MIC_ERROR");
       }
+      localStreamRef.current = stream;
+      setLocalStream(stream);
 
-      const { data, error: tokenError } = await supabase.functions.invoke("agora-token", {
-        body: {
-          channelName: roomIdRef.current,
-          uid: userIdRef.current,
+      // 2. Mở kênh tín hiệu (Supabase Realtime) để trao đổi offer/answer/ice
+      const channel = supabase.channel(`voice-call-${roomIdRef.current}`, {
+        config: {
+          presence: { key: userIdRef.current },
+          broadcast: { self: false },
         },
       });
-      if (tokenError || !data?.token || !data?.appId) {
-        throw new Error(
-          tokenError?.message ||
-            "Không thể lấy token kết nối. Hãy kiểm tra cấu hình Agora (App ID, App Certificate) trong Edge Function Secrets."
-        );
-      }
 
-      const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+      channel
+        .on("presence", { event: "sync" }, () => ensureConnections())
+        .on("presence", { event: "leave" }, () => ensureConnections())
+        .on("broadcast", { event: "voice-signal" }, ({ payload }) => {
+          handleSignal(payload as SignalPayload);
+        })
+        .subscribe((status) => {
+          if (status === "SUBSCRIBED") {
+            channel.track({ userId: userIdRef.current, name: userNameRef.current });
+          }
+        });
 
-      client.on("user-published", async (user, mediaType) => {
-        await client.subscribe(user, mediaType);
-        if (mediaType === "audio") {
-          user.audioTrack?.play();
-        }
-        refreshPeers();
-      });
-      client.on("user-unpublished", (user, mediaType) => {
-        if (mediaType === "audio") {
-          user.audioTrack?.stop();
-        }
-        refreshPeers();
-      });
-      client.on("user-joined", () => refreshPeers());
-      client.on("user-left", () => refreshPeers());
+      channelRef.current = channel;
 
-      await client.join(data.appId, roomIdRef.current, data.token, userIdRef.current);
-
-      const localTrack = await AgoraRTC.createMicrophoneAudioTrack({
-        AEC: true,
-        ANS: true,
-        AGC: true,
-      });
-      await client.publish(localTrack);
-
-      clientRef.current = client;
-      localTrackRef.current = localTrack;
-      setLocalStream(streamFromTrack(localTrack.getMediaStreamTrack()));
-
-      refreshPeers();
       setIsActive(true);
       setIsMuted(false);
       setIsJoining(false);
@@ -155,39 +315,47 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
     } catch (e) {
       const err = e instanceof Error ? e.message : "Không thể kết nối.";
       let msg = err;
-      if (err.includes("PERMISSION_DENIED") || err.includes("NotAllowed") || err.includes("denied")) {
+      if (err === "PERMISSION_DENIED") {
         msg =
-          "Trình duyệt đã chặn quyền micro. Hãy bấm biểu tượng ổ khóa trên thanh địa chỉ và bật 'Micro' (Cho phép), rồi bấm Tham gia lại.";
-      } else if (err.includes("DEVICE_NOT_FOUND") || err.includes("NotFound")) {
-        msg = "Không tìm thấy micro trên thiết bị. Hãy kiểm tra lại micro đã cắm/bật chưa.";
-      } else {
-        msg = "Không thể kết nối đến máy chủ Agora. Hãy kiểm tra cấu hình (App ID, App Certificate).";
+          "Trình duyệt đã chặn micro. Hãy bấm biểu tượng ổ khóa trên thanh địa chỉ và bật 'Micro' (Cho phép), rồi bấm Tham gia lại.";
+      } else if (err === "DEVICE_NOT_FOUND") {
+        msg = "Không tìm thấy micro trên thiết bị. Hãy kiểm tra micro đã cắm/bật chưa.";
+      } else if (err === "MIC_ERROR") {
+        msg = "Không thể truy cập micro. Vui lòng thử lại sau.";
       }
       setError(msg);
       setIsJoining(false);
       joiningRef.current = false;
       setIsActive(false);
-      if (clientRef.current) {
-        clientRef.current.leave();
-        clientRef.current = null;
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((t) => t.stop());
+        localStreamRef.current = null;
       }
-      if (localTrackRef.current) {
-        localTrackRef.current.close();
-        localTrackRef.current = null;
-      }
+      setLocalStream(null);
     }
-  }, [refreshPeers]);
+  }, [ensureConnections, handleSignal]);
 
   const leave = useCallback(() => {
-    if (clientRef.current) {
-      clientRef.current.leave();
-      clientRef.current = null;
-    }
-    if (localTrackRef.current) {
-      localTrackRef.current.close();
-      localTrackRef.current = null;
-    }
+    localStreamRef.current?.getTracks().forEach((t) => t.stop());
+    localStreamRef.current = null;
     setLocalStream(null);
+
+    pcMapRef.current.forEach((pc) => {
+      try {
+        pc.close();
+      } catch {
+        // ignore
+      }
+    });
+    pcMapRef.current.clear();
+    remoteStreamMapRef.current.clear();
+    namesRef.current = {};
+
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
     setPeers({});
     setParticipants([]);
     setIsActive(false);
@@ -198,23 +366,26 @@ export function useVoiceCall(roomId: string, userId: string, userName: string): 
   }, []);
 
   const toggleMute = useCallback(() => {
-    const track = localTrackRef.current;
-    if (!track) return;
-    const nextMuted = !isMuted;
-    track.setEnabled(!nextMuted);
-    setIsMuted(nextMuted);
+    const next = !isMuted;
+    localStreamRef.current?.getAudioTracks().forEach((t) => {
+      t.enabled = !next;
+    });
+    setIsMuted(next);
   }, [isMuted]);
 
-  // Cleanup on unmount
+  // Dọn dẹp khi thoát trang
   useEffect(() => {
     return () => {
-      if (clientRef.current) {
-        clientRef.current.leave();
-        clientRef.current = null;
-      }
-      if (localTrackRef.current) {
-        localTrackRef.current.close();
-        localTrackRef.current = null;
+      localStreamRef.current?.getTracks().forEach((t) => t.stop());
+      pcMapRef.current.forEach((pc) => {
+        try {
+          pc.close();
+        } catch {
+          // ignore
+        }
+      });
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
       }
     };
   }, []);

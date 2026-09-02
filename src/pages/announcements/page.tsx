@@ -116,7 +116,23 @@ export default function Announcements() {
     try {
       let imageUrl: string | undefined;
       if (imageFile) {
-        imageUrl = await uploadImage(imageFile, "announcements");
+        try {
+          imageUrl = await uploadImage(imageFile, "announcements");
+        } catch (uploadErr) {
+          // Fallback: use base64 for small images if storage fails
+          if (imageFile.size < 500 * 1024) {
+            const reader = new FileReader();
+            const base64 = await new Promise<string>((resolve, reject) => {
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.onerror = reject;
+              reader.readAsDataURL(imageFile);
+            });
+            imageUrl = base64;
+            notify("Lưu ý: Ảnh được lưu dưới dạng nội bộ do lỗi tải lên máy chủ.");
+          } else {
+            throw uploadErr;
+          }
+        }
       }
       await createAnnouncement(title.trim(), content.trim(), imageUrl);
       notify("Đã đăng thông báo.");
